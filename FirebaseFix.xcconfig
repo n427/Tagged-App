@@ -1,0 +1,3 @@
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG
+OTHER_SWIFT_FLAGS = -enable-experimental-feature AccessLevelOnImport
+
