@@ -205,7 +205,7 @@ struct RegisterView: View {
                     userEmail: email,
                     userProfileURL: downloadURL
                 )
-
+                
                 let encodedUser = try Firestore.Encoder().encode(user)
                 print("User encoded")
 

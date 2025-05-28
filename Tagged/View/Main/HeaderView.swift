@@ -28,7 +28,7 @@ struct HeaderView: View {
                         Text("Sentinel Grads")
                             .fontWeight(.semibold)
                             .foregroundColor(.black)
-                            .font(.system(size: 15))
+                            .font(.system(size: 10))
                             .padding(.horizontal, 40)
                         Image(systemName: "chevron.down")
                             .font(.system(size: 12))

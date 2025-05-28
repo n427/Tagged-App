@@ -13,6 +13,9 @@
 		BB49E8222DE537320015BBDA /* HeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB49E8212DE537310015BBDA /* HeaderView.swift */; };
 		BB49E8242DE58F420015BBDA /* ReusableProfileContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB49E8232DE58F400015BBDA /* ReusableProfileContent.swift */; };
 		BB49E8272DE591830015BBDA /* SDWebImageSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = BB49E8262DE591830015BBDA /* SDWebImageSwiftUI */; };
+		BB62EB732DE6286D00EC235B /* CreateNewPost.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB62EB722DE6286D00EC235B /* CreateNewPost.swift */; };
+		BB62EB752DE6287E00EC235B /* Post.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB62EB742DE6287E00EC235B /* Post.swift */; };
+		BB62EB772DE6461E00EC235B /* PostsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB62EB762DE6461D00EC235B /* PostsView.swift */; };
 		BB9C869E2DE2EBAD00CAA51A /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9C869D2DE2EBAD00CAA51A /* LoadingView.swift */; };
 		BBC20E1C2DE0EE6400781D93 /* TaggedApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC20E1B2DE0EE6400781D93 /* TaggedApp.swift */; };
 		BBC20E1E2DE0EE6400781D93 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC20E1D2DE0EE6400781D93 /* ContentView.swift */; };
@@ -55,6 +58,9 @@
 		BB49E81F2DE5342C0015BBDA /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		BB49E8212DE537310015BBDA /* HeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeaderView.swift; sourceTree = "<group>"; };
 		BB49E8232DE58F400015BBDA /* ReusableProfileContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReusableProfileContent.swift; sourceTree = "<group>"; };
+		BB62EB722DE6286D00EC235B /* CreateNewPost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateNewPost.swift; sourceTree = "<group>"; };
+		BB62EB742DE6287E00EC235B /* Post.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Post.swift; sourceTree = "<group>"; };
+		BB62EB762DE6461D00EC235B /* PostsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostsView.swift; sourceTree = "<group>"; };
 		BB9C869D2DE2EBAD00CAA51A /* LoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingView.swift; sourceTree = "<group>"; };
 		BBC20E182DE0EE6400781D93 /* Tagged.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Tagged.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BBC20E1B2DE0EE6400781D93 /* TaggedApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaggedApp.swift; sourceTree = "<group>"; };
@@ -122,6 +128,8 @@
 				BB49E81F2DE5342C0015BBDA /* ProfileView.swift */,
 				BB49E8212DE537310015BBDA /* HeaderView.swift */,
 				BB49E8232DE58F400015BBDA /* ReusableProfileContent.swift */,
+				BB62EB722DE6286D00EC235B /* CreateNewPost.swift */,
+				BB62EB762DE6461D00EC235B /* PostsView.swift */,
 			);
 			path = Main;
 			sourceTree = "<group>";
@@ -208,6 +216,7 @@
 			isa = PBXGroup;
 			children = (
 				BBCD1C1B2DE29870001588EA /* User.swift */,
+				BB62EB742DE6287E00EC235B /* Post.swift */,
 			);
 			path = Model;
 			sourceTree = "<group>";
@@ -358,8 +367,11 @@
 				BB49E81E2DE50A5B0015BBDA /* MainView.swift in Sources */,
 				BB49E8202DE5342D0015BBDA /* ProfileView.swift in Sources */,
 				BBD781392DE1687C000A539C /* WelcomeView.swift in Sources */,
+				BB62EB732DE6286D00EC235B /* CreateNewPost.swift in Sources */,
+				BB62EB752DE6287E00EC235B /* Post.swift in Sources */,
 				BBE4B0812DE1807400A6AAE2 /* ImagePicker.swift in Sources */,
 				BBE4B07D2DE1739D00A6AAE2 /* LoginView.swift in Sources */,
+				BB62EB772DE6461E00EC235B /* PostsView.swift in Sources */,
 				BB9C869E2DE2EBAD00CAA51A /* LoadingView.swift in Sources */,
 				BB49E8222DE537320015BBDA /* HeaderView.swift in Sources */,
 				BB49E81B2DE50A1D0015BBDA /* RegisterView.swift in Sources */,

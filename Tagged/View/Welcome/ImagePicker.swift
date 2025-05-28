@@ -3,6 +3,7 @@ import PhotosUI
 
 struct ImagePicker: UIViewControllerRepresentable {
     @Binding var selectedImage: UIImage?
+    @Binding var showPhotoError: Bool
 
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var config = PHPickerConfiguration()
@@ -30,12 +31,18 @@ struct ImagePicker: UIViewControllerRepresentable {
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             picker.dismiss(animated: true)
 
-            guard let provider = results.first?.itemProvider,
-                  provider.canLoadObject(ofClass: UIImage.self) else { return }
+            guard let provider = results.first?.itemProvider else { return }
 
-            provider.loadObject(ofClass: UIImage.self) { image, _ in
+            if provider.canLoadObject(ofClass: UIImage.self) {
+                provider.loadObject(ofClass: UIImage.self) { image, _ in
+                    DispatchQueue.main.async {
+                        self.parent.selectedImage = image as? UIImage
+                        self.parent.showPhotoError = false
+                    }
+                }
+            } else {
                 DispatchQueue.main.async {
-                    self.parent.selectedImage = image as? UIImage
+                    self.parent.showPhotoError = true
                 }
             }
         }
