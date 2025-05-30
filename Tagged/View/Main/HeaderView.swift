@@ -4,69 +4,56 @@ struct HeaderView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                // Hamburger menu
+                // Hamburger menu icon
                 Button(action: {
                     // action here
                 }) {
-                    VStack(spacing: 4) {
-                        ForEach(0..<3) { _ in
-                            Rectangle()
-                                .fill(Color.accentColor)
-                                .frame(width: 20, height: 2)
-                        }
-                    }
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(.accentColor)
                 }
-                .padding(.horizontal, 5)
-                
+
                 Spacer()
-                
-                // Dropdown-like middle button
+
+                // Dropdown-like selector
                 Button(action: {
-                    // Show dropdown here
+                    // Show dropdown
                 }) {
                     HStack(spacing: 5) {
                         Text("Sentinel Grads")
-                            .fontWeight(.semibold)
-                            .foregroundColor(.black)
-                            .font(.system(size: 10))
-                            .padding(.horizontal, 40)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.accentColor)
+
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 12))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.accentColor)
                     }
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 35)
+                    .padding(.vertical, 8)
                     .background(
-                        RoundedRectangle(cornerRadius: 15)
+                        RoundedRectangle(cornerRadius: 10)
                             .stroke(Color.accentColor, lineWidth: 1)
                     )
                 }
-                
+
                 Spacer()
-                
+
                 // Search icon
                 Button(action: {
-                    // Search action here
+                    // Search action
                 }) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 20))
+                        .font(.system(size: 20, weight: .medium))
                         .foregroundColor(.accentColor)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
-            
-            Rectangle()
-                .fill(Color.gray.opacity(0.3))
-                .frame(height: 0.5)
-                .edgesIgnoringSafeArea(.horizontal)
-        }
-        .padding(.top, 0)
-    }
-}
+            .padding(.horizontal, 15)
+            .padding(.top, 12)
+            .padding(.bottom, 20)
 
-struct HeaderView_Previews: PreviewProvider {
-    static var previews: some View {
-        HeaderView()
+            Divider()
+                .background(Color.gray.opacity(0.3))
+        }
+        .background(Color.white)
     }
 }

@@ -14,60 +14,61 @@ struct ReusableProfileContent: View {
         GeometryReader { geometry in
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 16) {
-                    
-                    // Username
                     Text(user.username)
                         .font(.system(size: 28, weight: .bold))
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 7)
+                        .padding(.top, 10)
+                        .padding(.bottom, 5)
                         .padding(.horizontal)
-                    
-                    // Profile header
+
+                    // Profile header (name + streak + profile image)
                     HStack(alignment: .top, spacing: 16) {
                         WebImage(url: user.userProfileURL)
                             .resizable()
                             .scaledToFill()
                             .frame(width: 80, height: 80)
                             .clipShape(Circle())
-                        
-                        VStack(alignment: .leading, spacing: 6) {
+
+                        VStack(alignment: .leading, spacing: 8) {
                             Text(user.name)
                                 .foregroundColor(.primary)
                                 .font(.headline)
-                            
-                            HStack(spacing: 0) {
-                                Text("4-week")
-                                    .foregroundColor(.accentColor)
-                                    .fontWeight(.semibold)
-                                Text(" streak")
-                                    .foregroundColor(.primary)
-                                    .fontWeight(.semibold)
+
+                            HStack(spacing: 35) {
+                                statView("3", "posts")
+                                statView("80", "likes")
+                                statView("#4", "rank")
                             }
                         }
-                        
+
                         Spacer()
                     }
                     .padding(.horizontal)
-                    
-                    // Bio
+
                     HStack(alignment: .top) {
+                        Text("4-week")
+                            .foregroundColor(.accentColor)
+                            .fontWeight(.semibold)
+                        Text(" streak")
+                            .foregroundColor(.primary)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, -6)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    
+                    
+                    HStack(spacing: 0) {
                         Text(user.userBio)
                             .font(.subheadline)
                             .foregroundColor(.primary)
                             .multilineTextAlignment(.leading)
                         Spacer()
                     }
-                    .padding(.horizontal)
-                    
-                    // Stats
-                    HStack(spacing: 60) {
-                        statView("3", "posts")
-                        statView("80", "likes")
-                        statView("#4", "rank")
-                    }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
-                    
+                    .padding(.top, -10)
+
                     // Buttons
                     if isMyProfile {
                         HStack(spacing: 16) {
@@ -78,6 +79,7 @@ struct ReusableProfileContent: View {
                             profileButton("Settings") {
                                 showSettings.toggle()
                             }
+                            
                             .confirmationDialog("Settings", isPresented: $showSettings, titleVisibility: .visible) {
                                 Button(role: .none) {
                                     logOutAction?()
@@ -92,10 +94,12 @@ struct ReusableProfileContent: View {
                             }
                         }
                         .padding(.horizontal)
+                        .padding(.bottom, 5)
                     }
                     
                     Divider()
                         .padding(.horizontal)
+                        .padding(.bottom, 5)
                     
                     // Grid
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
@@ -127,13 +131,15 @@ struct ReusableProfileContent: View {
     func profileButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .fontWeight(.semibold)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(Color.accentColor)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
                         .stroke(Color.accentColor, lineWidth: 1)
                 )
         }
     }
+
 }

@@ -26,7 +26,7 @@ struct ProfileView: View {
                     await fetchUserData()
                 }
             }else {
-                ProgressView()
+                Color.clear
             }
         }
         

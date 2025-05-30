@@ -36,89 +36,95 @@ struct CreateNewPost: View {
     @FocusState private var showKeyboard: Bool
     
     var body: some View {
-        VStack() {
-            HStack {
-                Text("Create Post")
-                    .font(.system(size: 30))
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                    .padding(.horizontal, 10)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal)
-            .padding(.top, 7)
-            .padding(.bottom, 10)
-            
-            // Selected Image or Camera Selector
-            if let image = selectedImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: UIScreen.main.bounds.width - 40, height: UIScreen.main.bounds.width - 40)
-                    .clipped()
-                    .cornerRadius(5)
-                    .padding(.horizontal)
-                    .onTapGesture {
+        ZStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Create Post")
+                        .font(.title)
+                        .fontWeight(.bold)
+
+                    // Image Picker
+                    // Screen width minus 2×25 (your horizontal padding)
+                    let sideLength = UIScreen.main.bounds.width - 50
+
+                    Button(action: {
                         showImagePicker = true
+                    }) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.accentColor.opacity(0.05))
+
+                            if let image = selectedImage {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: sideLength, height: sideLength)
+                                    .clipped()
+                                    .cornerRadius(12)
+                            } else {
+                                VStack(spacing: 8) {
+                                    Image(systemName: "camera")
+                                        .font(.system(size: 30))
+                                        .foregroundColor(.accentColor)
+
+                                    Text("Tap to add a photo")
+                                        .font(.footnote)
+                                        .foregroundColor(.accentColor)
+                                }
+                            }
+                        }
+                        .frame(width: sideLength, height: sideLength)
                     }
-                    .padding(.horizontal, 10)
-            } else {
-                Button(action: {
-                    showImagePicker = true
-                }) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 5)
-                            .fill(Color.accentColor.opacity(0.05))
-                            .frame(width: UIScreen.main.bounds.width - 40, height: UIScreen.main.bounds.width - 40)
-                        
-                        Image(systemName: "camera")
-                            .font(.system(size: 40))
-                            .foregroundColor(.accentColor)
+
+
+                    // Title Field
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Title")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        TextField("Add a title", text: $postTitle)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                            .font(.body)
+                            .focused($showKeyboard)
                     }
-                    .padding(.horizontal, 10)
+
+                    // Description Field
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Description")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        TextField("Add a description", text: $postText, axis: .vertical)
+                            .lineLimit(5)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                            .font(.body)
+                            .focused($showKeyboard)
+                    }
+
+                    Spacer(minLength: 80)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 25)
+                .padding(.top)
+
             }
-            
-            // Title & Description
-            VStack(spacing: 12) {
-                TextField("Add a title", text: $postTitle)
-                    .font(.title3)
-                    .padding(.horizontal)
-                    .fontWeight(.bold)
-                
-                TextField("Add a decription", text: $postText, axis: .vertical)
-                    .lineLimit(4)
-                    .padding(.horizontal)
+            .fullScreenCover(isPresented: $showImagePicker) {
+                ImagePicker(selectedImage: $selectedImage, showPhotoError: $showPhotoError)
             }
-            .padding(.top, 10)
-            
-            
-            .padding(.horizontal, 10)
-        }
-        .frame(maxHeight: .infinity, alignment: .top)
-        
-        .fullScreenCover(isPresented: $showImagePicker) {
-            ImagePicker(selectedImage: $selectedImage, showPhotoError: $showPhotoError)
-        }
-        
-        .alert("Only photos are allowed.", isPresented: $showPhotoError) {
-            Button("OK", role: .cancel) {}
-        }
-        
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 8) {
-                HStack {
-                    Spacer(minLength: 20)
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(height: 1)
-                    Spacer(minLength: 20)
-                }
-                .padding(.bottom, 5)
-                
+            .alert("Only photos are allowed.", isPresented: $showPhotoError) {
+                Button("OK", role: .cancel) {}
+            }
+
+            // POST BUTTON
+            VStack {
+                Spacer()
+
                 let isPostDisabled = selectedImage == nil || postTitle.trimmingCharacters(in: .whitespaces).isEmpty
-                
+
                 Button(action: {
                     createPost()
                 }) {
@@ -132,27 +138,24 @@ struct CreateNewPost: View {
                         .padding(.horizontal)
                 }
                 .disabled(isPostDisabled)
+                .padding(.bottom, 20)
+                .padding(.horizontal, 7)
+                .background(Color.white.opacity(0.95)) // Lift from bottom
             }
-            .padding(.bottom)
-            
-            
+
+            if isLoading {
+                LoadingView(show: $isLoading)
+            }
         }
-            
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .alert(errorMessage, isPresented: $showError, actions: {})
-        
         .onChange(of: selectedImage) {
             if let newImage = selectedImage {
-                if let data = newImage.jpegData(compressionQuality: 0.8) {
-                    postImageData = data
-                }
+                postImageData = newImage.jpegData(compressionQuality: 0.8)
             }
         }
-        
-        .overlay {
-            LoadingView(show: $isLoading)
-        }
     }
+
     
     func createPost() {
         isLoading = true
