@@ -16,7 +16,9 @@ struct TaggedApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            NavigationStack {
+                ContentView() // your TabView lives here
+            }
         }
     }
 }

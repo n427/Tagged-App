@@ -12,12 +12,10 @@ struct LoadingView: View {
     var body: some View {
         ZStack {
             if show {
-                Group {
-                    ProgressView()
-                        .padding(15)
-                        .background(.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .foregroundColor(Color.accentColor)
-                }
+                ProgressView()
+                    .padding(15)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .foregroundColor(Color.accentColor)
             }
         }
         .animation(.easeInOut(duration: 0.25), value: show)

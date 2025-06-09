@@ -21,6 +21,8 @@ struct ProfileView: View {
                     logOutAction: logOutUser,
                     deleteAccountAction: deleteAccount
                 )
+                
+                .padding(.top, 12)
                 .refreshable {
                     self.myProfile = nil
                     await fetchUserData()

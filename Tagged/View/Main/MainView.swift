@@ -6,6 +6,14 @@ enum Tab: String {
 
 struct MainView: View {
     @AppStorage("selected_tab") private var selectedTabRaw: String = Tab.home.rawValue
+    @State private var showMenu = false
+    @State private var showCreatePage = false
+    @State private var showJoinModal = false
+    @State private var showGroupsPage = false
+    @State private var showSearch = false
+
+    @State private var activeGroupID: UUID = UUID()
+    @State private var explorePosts: [Post] = []
     
     var selectedTab: Tab {
         get { Tab(rawValue: selectedTabRaw) ?? .home }
@@ -13,57 +21,83 @@ struct MainView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HeaderView()
-
-            Divider()
-                .frame(height: 0.5)
-                .background(Color.gray.opacity(0.3))
-
+        NavigationStack {
             ZStack {
-                switch selectedTab {
-                case .home:
-                    VStack {
-                        Spacer().frame(height: 16)
-                        Text("Home View")
-                        Spacer()
+                VStack(spacing: 0) {
+                    HeaderView(showMenu: $showMenu, showSearch: $showSearch)
+
+                    Divider()
+                        .frame(height: 0.5)
+                        .background(Color.gray.opacity(0.3))
+
+                    ZStack {
+                        switch selectedTab {
+                        case .home:
+                            ExploreView(posts: $explorePosts)
+                        case .messages:
+                            YearbookView()
+                        case .create:
+                            CreateNewPost { _ in }
+                        case .crown:
+                            LeaderboardView()
+                        case .profile:
+                            ProfileView()
+                        }
                     }
-                case .messages:
-                    VStack {
-                        Spacer().frame(height: 16)
-                        Text("Messages View")
-                        Spacer()
-                    }
-                case .create:
-                    VStack {
-                        CreateNewPost { _ in }
-                            .padding(.top, 12)
-                    }
-                case .crown:
-                    VStack {
-                        Spacer().frame(height: 16)
-                        Text("Crown View")
-                        Spacer()
-                    }
-                case .profile:
-                    VStack {
-                        ProfileView()
-                            .padding(.top, 12)
-                    }
+                    .navigationBarHidden(true)
+
+                    Divider()
+                        .frame(height: 0.5)
+                        .background(Color.gray.opacity(0.3))
+
+                    CustomTabBar(selectedTab: Binding(
+                        get: { Tab(rawValue: selectedTabRaw) ?? .home },
+                        set: { selectedTabRaw = $0.rawValue }
+                    ))
+                }
+                .ignoresSafeArea(.keyboard)
+
+                if showMenu {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            withAnimation {
+                                showMenu = false
+                            }
+                        }
+
+                    SideDrawerView(activeGroupID: $activeGroupID, showMenu: $showMenu, showJoinModal: $showJoinModal, showCreatePage: $showCreatePage, showGroupsPage: $showGroupsPage)
+                        .frame(width: 280)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .transition(.move(edge: .leading))
+                        .zIndex(1)
+                }
+
+                if showJoinModal {
+                    JoinGroupModal(isPresented: $showJoinModal)
+                        .zIndex(2)
+                }
+
+                if showCreatePage {
+                    CreateGroupView(isPresented: $showCreatePage)
+                        .transition(.move(edge: .trailing))
+                        .zIndex(2)
+                }
+
+                if showGroupsPage {
+                    ViewPublicGroupsView(isPresented: $showGroupsPage)
+                        .transition(.move(edge: .trailing))
+                        .zIndex(2)
                 }
             }
-
-            Divider()
-                .frame(height: 0.5)
-                .background(Color.gray.opacity(0.3))
-
-            CustomTabBar(selectedTab: Binding(
-                get: { Tab(rawValue: selectedTabRaw) ?? .home },
-                set: { selectedTabRaw = $0.rawValue }
-            ))
+            .animation(.easeInOut(duration: 0.25), value: showMenu)
+            .navigationDestination(isPresented: $showSearch) {
+                UserSearchView()
+            }
         }
-        .ignoresSafeArea(.keyboard)
     }
+
+
 }
 
 struct CustomTabBar: View {
@@ -76,9 +110,9 @@ struct CustomTabBar: View {
 
             HStack {
                 tabButton(tab: .home, icon: "house")
-                tabButton(tab: .messages, icon: "envelope")
+                tabButton(tab: .messages, icon: "books.vertical")
                 tabButton(tab: .create, icon: "camera")
-                tabButton(tab: .crown, icon: "crown")
+                tabButton(tab: .crown, icon: "trophy")
                 tabButton(tab: .profile, icon: "person")
             }
             .padding(.top, 15)

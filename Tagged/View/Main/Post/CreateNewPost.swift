@@ -42,6 +42,7 @@ struct CreateNewPost: View {
                     Text("Create Post")
                         .font(.title)
                         .fontWeight(.bold)
+                        .padding(.top, 15)
 
                     // Image Picker
                     // Screen width minus 2×25 (your horizontal padding)
@@ -85,9 +86,13 @@ struct CreateNewPost: View {
 
                         TextField("Add a title", text: $postTitle)
                             .padding()
-                            .background(Color(.systemGray6))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.accentColor.opacity(0.5), lineWidth: 1)
+                            )
                             .cornerRadius(10)
                             .font(.body)
+                        
                             .focused($showKeyboard)
                     }
 
@@ -98,18 +103,21 @@ struct CreateNewPost: View {
                             .foregroundColor(.secondary)
 
                         TextField("Add a description", text: $postText, axis: .vertical)
-                            .lineLimit(5)
+                        
                             .padding()
-                            .background(Color(.systemGray6))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.accentColor.opacity(0.5), lineWidth: 1)
+                            )
                             .cornerRadius(10)
                             .font(.body)
+                            .lineLimit(5)
                             .focused($showKeyboard)
                     }
 
                     Spacer(minLength: 80)
                 }
                 .padding(.horizontal, 25)
-                .padding(.top)
 
             }
             .fullScreenCover(isPresented: $showImagePicker) {
@@ -146,6 +154,8 @@ struct CreateNewPost: View {
             if isLoading {
                 LoadingView(show: $isLoading)
             }
+        }
+        .refreshable {
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .alert(errorMessage, isPresented: $showError, actions: {})
@@ -195,7 +205,8 @@ struct CreateNewPost: View {
     }
     
     func createDocumentAtFirebase(_ post: Post)async throws {
-        let _ = try Firestore.firestore().collection("Posts").addDocument(from: post, completion:  {error in
+        let doc = Firestore.firestore().collection("Posts").document()
+        let _ = try doc.setData(from: post, completion:  {error in
             if error == nil {
                 isLoading = false
                 onPost(post)
