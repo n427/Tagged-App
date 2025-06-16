@@ -1,6 +1,7 @@
 import SwiftUI
 import SDWebImageSwiftUI
 import Firebase
+import FirebaseFirestore
 
 struct ReusablePostContent: View {
     var basedOnUID: Bool = false
@@ -39,9 +40,12 @@ struct ReusablePostContent: View {
             }
         }
         .task {
-            guard posts.isEmpty else{return}
-            await fetchPosts()
+            if posts.isEmpty {
+                paginationDoc = nil  // reset pagination if needed
+                await fetchPosts()
+            }
         }
+
         .refreshable {
             guard basedOnUID else{return}
             posts = []
@@ -53,34 +57,35 @@ struct ReusablePostContent: View {
     @ViewBuilder
     func Posts() -> some View {
         ForEach(posts) { post in
-            NavigationLink(
-                destination: PostDetailView(
+            NavigationLink {
+                PostDetailView(
                     post: post,
                     onUpdate: { updatedPost in
-                        if let index = posts.firstIndex(where: {post in
-                            post.id == updatedPost.id
-                        }){
+                        if let index = posts.firstIndex(where: { $0.id == updatedPost.id }) {
                             posts[index].likedIDs = updatedPost.likedIDs
                         }
                     },
                     onDelete: {
                         withAnimation(.easeInOut(duration: 0.25)) {
-                            posts.removeAll{post.id == $0.id}
+                            posts.removeAll { $0.id == post.id }
                         }
                     }
                 )
                 .toolbar(.hidden, for: .tabBar)
-            ) {
+            } label: {
                 ExploreCard(post: post)
+                    .contentShape(Rectangle()) // 👈 Ensures the entire card is tappable, no spillover
             }
-            .buttonStyle(PlainButtonStyle())
-            .onAppear{
+            .buttonStyle(PlainButtonStyle()) // Prevents button effects
+            .onAppear {
                 if post.id == posts.last?.id && paginationDoc != nil {
-                    Task{await fetchPosts()}
+                    Task { await fetchPosts() }
                 }
             }
         }
     }
+
+
     
     func fetchPosts() async {
         guard !isFetching else { return } // optional: prevent double fetch
@@ -121,40 +126,49 @@ struct ReusablePostContent: View {
 
 }
 
+struct RoundedCorner: Shape {
+    var radius: CGFloat
+    var corners: UIRectCorner
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(path.cgPath)
+    }
+}
 
 struct ExploreCard: View {
     let post: Post
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Rectangle()
-                .fill(Color.gray.opacity(0.1))
-                .aspectRatio(1, contentMode: .fit)
-                .overlay(
-                    WebImage(url: post.imageURL)
-                        .resizable()
-                        .scaledToFill()
-                        .clipped() // 👈 ensure image doesn't overflow
-                )
-            
-            .cornerRadius(6)
+            GeometryReader { geo in
+                WebImage(url: post.imageURL)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geo.size.width, height: geo.size.width) // enforce square
+                    .clipShape(RoundedCorner(radius: 6, corners: [.topLeft, .topRight]))
+                    .clipped()
+            }
+            .frame(height: UIScreen.main.bounds.width / 2 - 22) // pre-set height to match square grid cell
 
-            // Caption - truncated
+            // Caption
             Text(post.title)
-                .font(.footnote)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 10)
+                .font(.system(size: 14, weight: .bold))
 
             HStack {
-                // PFP
                 WebImage(url: post.userProfileURL)
                     .resizable()
                     .frame(width: 18, height: 18)
                     .clipShape(Circle())
 
-                // Username - truncated
                 Text(post.userName)
                     .font(.caption)
                     .fontWeight(.medium)
@@ -164,14 +178,12 @@ struct ExploreCard: View {
 
                 Spacer()
 
-                // Fire streak badge
                 HStack(spacing: 4) {
                     Text("🔥")
                         .font(.system(size: 11))
                     Text("3")
-                        .font(.caption)
-                        .fontWeight(.semibold)
                         .font(.system(size: 11))
+                        .fontWeight(.semibold)
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
@@ -188,3 +200,4 @@ struct ExploreCard: View {
         .cornerRadius(6)
     }
 }
+

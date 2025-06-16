@@ -3,68 +3,71 @@ import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
 
+// MARK: - LoginView
+
 struct LoginView: View {
+    
+    // MARK: - User Input
+    
     @State private var email = ""
     @State private var password = ""
+    
+    // MARK: - Navigation and State
+
     @State private var navigateToHome = false
+    @Binding var path: NavigationPath
+
+    // MARK: - UI State
+
     @State var showError: Bool = false
     @State var errorMessage: String = ""
-    @Binding var path: NavigationPath
     @State var isLoading: Bool = false
-    
+
+    // MARK: - Persistent Storage
+
     @AppStorage("log_status") var logStatus: Bool = false
     @AppStorage("user_profile_url") var profileURL: URL?
     @AppStorage("user_name") var userNameStored: String = ""
     @AppStorage("user_UID") var userUID: String = ""
-
+    
     var body: some View {
-        
         VStack(alignment: .leading, spacing: 20) {
             
-            HStack {
-                Button(action: {
-                    path.removeLast(path.count) // Go back to root
-                }) {
-                    HStack {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
-                    .padding([.top, .leading, .trailing])
-                    .padding(.top, -30)
-                    .padding(.horizontal, -5)
-                    .foregroundColor(.accentColor) // Custom color for the back button
-                }
-            }
-            
+            // MARK: - Header
+
             Text("Let’s Sign You In")
                 .font(.largeTitle)
                 .fontWeight(.bold)
                 .foregroundColor(.accentColor)
                 .padding(.horizontal, 10)
+                .padding(.top, -5)
             
             Text("Welcome back :)")
                 .padding(.horizontal, 10)
 
-            // Email Field
+            // MARK: - Email Field
+
             TextField("Email", text: $email)
                 .textInputAutocapitalization(.never)
                 .padding()
                 .cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor.opacity(0.5), lineWidth: 1))
                 .padding(.horizontal, 10)
             
-            // Password Field
+            // MARK: - Password Field
+
             SecureField("Password", text: $password)
                 .textInputAutocapitalization(.never)
                 .padding()
                 .cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor.opacity(0.5), lineWidth: 1))
                 .padding(.horizontal, 10)
 
-            // Reset Password Link
+            // MARK: - Reset Password
+
             HStack {
                 Spacer()
-                Button(action: {resetPassword()}) {
+                Button(action: { resetPassword() }) {
                     Text("Reset Password?")
                         .font(.footnote)
                         .foregroundColor(.accentColor)
@@ -73,7 +76,8 @@ struct LoginView: View {
                 }
             }
 
-            // Login Button
+            // MARK: - Login Button
+
             Button(action: {
                 loginUser()
             }) {
@@ -87,88 +91,102 @@ struct LoginView: View {
                     .padding(.horizontal, 10)
             }
             .disableWithOpacity(email == "" || password == "")
+
             Spacer()
 
-            // Register Link
+            // MARK: - Register Link
+
             HStack {
                 Text("Don’t have an account?")
                     .font(.system(size: 18))
-                Button("Register Now"){
+                Button("Register Now") {
                     path.append(AppRoute.register)
                 }
-                    .fontWeight(.bold)
-                    .font(.system(size: 18))
-                    .foregroundColor(.accentColor)
+                .fontWeight(.bold)
+                .font(.system(size: 18))
+                .foregroundColor(.accentColor)
             }
             .font(.footnote)
             .padding(.bottom)
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .padding()
-        .overlay(content: {
+        .overlay {
             LoadingView(show: $isLoading)
-        })
-        .navigationBarBackButtonHidden(true)
+        }
+        .navigationBarBackButtonHidden(false)
         .alert(errorMessage, isPresented: $showError, actions: {})
     }
-    
+
+    // MARK: - Login Logic
+
     func loginUser() {
         isLoading = true
         closeKeyboard()
+        
         Task {
             defer {
                 Task { @MainActor in
                     isLoading = false
                 }
             }
+
             do {
                 try await Auth.auth().signIn(withEmail: email, password: password)
                 try await fetchUser()
-            }
-            catch {
+            } catch {
                 await setError(error)
             }
         }
     }
-    
+
+    // MARK: - Fetch User Data from Firestore
+
     func fetchUser() async throws {
-        guard let userID = Auth.auth().currentUser?.uid else {return}
-        let user = try await Firestore.firestore().collection("Users").document(userID).getDocument(as: User.self)
-        
-        await MainActor.run(body: {
+        guard let userID = Auth.auth().currentUser?.uid else { return }
+
+        let user = try await Firestore.firestore()
+            .collection("Users")
+            .document(userID)
+            .getDocument(as: User.self)
+
+        await MainActor.run {
             userUID = userID
             userNameStored = user.username
             profileURL = user.userProfileURL
             logStatus = true
-        })
+        }
     }
-    
+
+    // MARK: - Reset Password
+
     func resetPassword() {
         Task {
             do {
-                try await Auth.auth().sendPasswordReset(withEmail:email)
+                try await Auth.auth().sendPasswordReset(withEmail: email)
                 print("Link sent")
-            }
-            catch {
+            } catch {
                 await setError(error)
             }
         }
     }
-    
-    //Errors
-    func setError(_ error: Error)async{
-        await MainActor.run(body: {
+
+    // MARK: - Error Handling
+
+    func setError(_ error: Error) async {
+        await MainActor.run {
             errorMessage = error.localizedDescription
             showError.toggle()
             isLoading = false
-        })
+        }
     }
-
 }
+
+// MARK: - Preview
 
 struct LoginView_Previews: PreviewProvider {
     @State static var path = NavigationPath()
-    
+
     static var previews: some View {
         LoginView(path: $path)
     }

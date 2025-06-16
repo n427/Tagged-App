@@ -1,5 +1,7 @@
 import SwiftUI
 
+// MARK: - Navigation Routes
+
 enum AppRoute: Hashable {
     case login
     case register
@@ -10,15 +12,19 @@ enum AppRoute: Hashable {
     case home
 }
 
+// MARK: - Welcome View
+
 struct WelcomeView: View {
     @State private var path = NavigationPath()
+    
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 30) {
                 
                 Spacer()
                 
-                // App title
+                // MARK: - App Logo
+                
                 Image("tagged_logo")
                     .resizable()
                     .scaledToFit()
@@ -26,58 +32,68 @@ struct WelcomeView: View {
                 
                 Spacer()
                 
-                // Buttons
-                Button("Login") {
+                // MARK: - Primary Actions (Login / Register)
+
+                Button(action: {
                     path.append(AppRoute.login)
+                }) {
+                    Text("Login")
+                        .frame(maxWidth: 200)
+                        .padding()
+                        .background(Color.accentColor)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                        .fontWeight(.bold)
                 }
-                .frame(maxWidth: 200)
-                .padding()
-                .background(Color.accentColor)
-                .foregroundColor(.white)
-                .cornerRadius(10)
-                .fontWeight(.bold)
-                
+                .contentShape(Rectangle())
                 .padding(.horizontal)
                 .padding(.bottom, 20)
 
-                Button("Register") {
+                Button(action: {
                     path.append(AppRoute.register)
+                }) {
+                    Text("Register")
+                        .frame(maxWidth: 200)
+                        .padding()
+                        .background(Color.accentColor)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                        .fontWeight(.bold)
                 }
-                
-                .frame(maxWidth: 200)
-                .padding()
-                .background(Color.accentColor)
-                .foregroundColor(.white)
-                .cornerRadius(10)
-                .fontWeight(.bold)
-                
+                .contentShape(Rectangle())
                 .padding(.horizontal)
                 .padding(.bottom, 20)
 
-                Button("How to Play") {
+                // MARK: - Secondary Action
+
+                Button(action: {
                     path.append(AppRoute.howToPlay)
+                }) {
+                    Text("How to Play")
+                        .frame(maxWidth: 200)
+                        .padding()
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.accentColor, lineWidth: 1)
+                        )
+                        .foregroundColor(.accentColor)
+                        .fontWeight(.bold)
                 }
-                .frame(maxWidth: 200)
-                .padding()
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.accentColor, lineWidth: 1)
-                )
-                .fontWeight(.bold)
-                
-                .foregroundColor(.accentColor)
+                .contentShape(Rectangle())
                 .padding(.horizontal)
 
                 Spacer()
+
+                // MARK: - Footer Links
 
                 HStack {
                     Button("\(Image(systemName: "info.circle")) Privacy Policy") {
                         path.append(AppRoute.privacyPolicy)
                     }
                     .padding(.horizontal, 15)
-                    
+
                     Spacer()
-                    
+
                     Button("\(Image(systemName: "questionmark.circle")) Help") {
                         path.append(AppRoute.help)
                     }
@@ -86,7 +102,9 @@ struct WelcomeView: View {
                 .font(.footnote)
                 .padding(.horizontal)
                 .padding(.bottom, 20)
-                
+
+                // MARK: - Navigation Destinations
+
                 .navigationDestination(for: AppRoute.self) { route in
                     switch route {
                     case .login:
@@ -98,17 +116,11 @@ struct WelcomeView: View {
                             .font(.largeTitle)
                             .bold()
                     case .privacyPolicy:
-                        Text("Privacy Policy")
-                            .font(.largeTitle)
-                            .bold()
+                        PrivacyView(path: $path)
                     case .help:
-                        Text("Help")
-                            .font(.largeTitle)
-                            .bold()
+                        HelpView(path: $path)
                     case .howToPlay:
-                        Text("How to Play")
-                            .font(.largeTitle)
-                            .bold()
+                        InstructionsView(path: $path)
                     case .resetPassword:
                         Text("Reset Password")
                             .font(.largeTitle)
@@ -120,21 +132,26 @@ struct WelcomeView: View {
     }
 }
 
+// MARK: - Preview
+
 struct WelcomeView_Previews: PreviewProvider {
     static var previews: some View {
         WelcomeView()
     }
 }
 
+// MARK: - View Extensions
+
 extension View {
-    //Opacity
-    func disableWithOpacity(_ condition: Bool)->some View {
+    
+    // Disables the view and lowers opacity when the condition is true.
+    func disableWithOpacity(_ condition: Bool) -> some View {
         self
             .disabled(condition)
             .opacity(condition ? 0.6 : 1)
     }
     
-    //Close keyboard
+    // Closes the keyboard. Note: This must be called from a view modifier or gesture, not inside the view directly.
     func closeKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }

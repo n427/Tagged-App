@@ -1,40 +1,36 @@
-//
-//  CreateNewPost.swift
-//  Tagged
-//
-//  Created by Nicole Zhang on 2025-05-27.
-//
-
 import SwiftUI
 import PhotosUI
 import Firebase
 import FirebaseStorage
+import FirebaseFirestore
 
 struct CreateNewPost: View {
-    var onPost: (Post)-> ()
-    
+    var onPost: (Post) -> ()
+
+    @FocusState private var focusedField: Field?
+    private enum Field { case title, description }
+
     @AppStorage("selected_tab") private var selectedTab: Tab = .home
-    
+
     @State var postTitle: String = ""
     @State var postText: String = ""
     @State var postImageData: Data?
-    
+
     @AppStorage("user_profile_url") private var profileURL: URL?
     @AppStorage("user_name") private var username: String = ""
     @AppStorage("user_UID") private var userUID: String = ""
-    
+
     @Environment(\.dismiss) private var dismiss
     @State private var isLoading: Bool = false
     @State private var errorMessage: String = ""
     @State private var showError: Bool = false
-    
+
     @State private var selectedImage: UIImage? = nil
     @State private var showImagePicker = false
-    @State private var photoItem: PhotosPickerItem?
     @State private var showPhotoError: Bool = false
-    
-    @FocusState private var showKeyboard: Bool
-    
+
+    @State private var keyboardHeight: CGFloat = 0
+
     var body: some View {
         ZStack {
             ScrollView {
@@ -44,8 +40,6 @@ struct CreateNewPost: View {
                         .fontWeight(.bold)
                         .padding(.top, 15)
 
-                    // Image Picker
-                    // Screen width minus 2×25 (your horizontal padding)
                     let sideLength = UIScreen.main.bounds.width - 50
 
                     Button(action: {
@@ -77,48 +71,72 @@ struct CreateNewPost: View {
                         .frame(width: sideLength, height: sideLength)
                     }
 
-
-                    // Title Field
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Title")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
 
                         TextField("Add a title", text: $postTitle)
+                            .focused($focusedField, equals: .title)
                             .padding()
-                            .overlay(
+                            .background(
                                 RoundedRectangle(cornerRadius: 10)
                                     .stroke(Color.accentColor.opacity(0.5), lineWidth: 1)
                             )
-                            .cornerRadius(10)
-                            .font(.body)
-                        
-                            .focused($showKeyboard)
                     }
 
-                    // Description Field
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Description")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
 
                         TextField("Add a description", text: $postText, axis: .vertical)
-                        
+                            .focused($focusedField, equals: .description)
                             .padding()
                             .overlay(
                                 RoundedRectangle(cornerRadius: 10)
                                     .stroke(Color.accentColor.opacity(0.5), lineWidth: 1)
                             )
-                            .cornerRadius(10)
                             .font(.body)
                             .lineLimit(5)
-                            .focused($showKeyboard)
                     }
 
-                    Spacer(minLength: 80)
-                }
-                .padding(.horizontal, 25)
+                    let isPostDisabled = selectedImage == nil || postTitle.trimmingCharacters(in: .whitespaces).isEmpty
 
+                    Button(action: {
+                        focusedField = nil
+                        createPost()
+                    }) {
+                        Text("Post")
+                            .bold()
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(isPostDisabled ? Color.gray.opacity(0.3) : Color.accentColor)
+                            .foregroundColor(isPostDisabled ? Color.gray : .white)
+                            .cornerRadius(12)
+                    }
+                    .disabled(isPostDisabled)
+                    .padding(.top, 10)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, keyboardHeight > 0 ? keyboardHeight - 60 : 30)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notif in
+                if let keyboardFrame = notif.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+                    let height = UIScreen.main.bounds.height - keyboardFrame.origin.y
+                    withAnimation {
+                        self.keyboardHeight = max(height, 0)
+                    }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                withAnimation {
+                    self.keyboardHeight = 0
+                }
+            }
+            .onTapGesture {
+                focusedField = nil
             }
             .fullScreenCover(isPresented: $showImagePicker) {
                 ImagePicker(selectedImage: $selectedImage, showPhotoError: $showPhotoError)
@@ -127,37 +145,10 @@ struct CreateNewPost: View {
                 Button("OK", role: .cancel) {}
             }
 
-            // POST BUTTON
-            VStack {
-                Spacer()
-
-                let isPostDisabled = selectedImage == nil || postTitle.trimmingCharacters(in: .whitespaces).isEmpty
-
-                Button(action: {
-                    createPost()
-                }) {
-                    Text("Post")
-                        .bold()
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(isPostDisabled ? Color.gray.opacity(0.3) : Color.accentColor)
-                        .foregroundColor(isPostDisabled ? Color.gray : .white)
-                        .cornerRadius(12)
-                        .padding(.horizontal)
-                }
-                .disabled(isPostDisabled)
-                .padding(.bottom, 20)
-                .padding(.horizontal, 7)
-                .background(Color.white.opacity(0.95)) // Lift from bottom
-            }
-
             if isLoading {
                 LoadingView(show: $isLoading)
             }
         }
-        .refreshable {
-        }
-        .ignoresSafeArea(.keyboard, edges: .bottom)
         .alert(errorMessage, isPresented: $showError, actions: {})
         .onChange(of: selectedImage) {
             if let newImage = selectedImage {
@@ -166,15 +157,14 @@ struct CreateNewPost: View {
         }
     }
 
-    
     func createPost() {
         isLoading = true
-        showKeyboard = false
         Task {
             do {
-                guard let profileURL = profileURL else {return}
+                guard let profileURL = profileURL else { return }
                 let imageReferenceID = "\(userUID)\(Date())"
                 let storageRef = Storage.storage().reference().child("Post_Images").child(imageReferenceID)
+
                 if let data = postImageData {
                     let _ = try await storageRef.putDataAsync(data)
                     let downloadURL = try await storageRef.downloadURL()
@@ -182,31 +172,22 @@ struct CreateNewPost: View {
                     let post = Post(title: postTitle, text: postText, imageURL: downloadURL, imageReferenceID: imageReferenceID, userName: username, userUID: userUID, userProfileURL: profileURL)
                     try await createDocumentAtFirebase(post)
 
-                    postTitle = ""
-                    postText = ""
-                    postImageData = nil
-                    selectedImage = nil
-                    selectedTab = .home
-                }else {
+                    resetFields()
+                } else {
                     let post = Post(title: postTitle, text: postText, userName: username, userUID: userUID, userProfileURL: profileURL)
                     try await createDocumentAtFirebase(post)
-                    postTitle = ""
-                    postText = ""
-                    postImageData = nil
-                    selectedImage = nil
-                    selectedTab = .home
+                    resetFields()
                 }
-                
-            }
-            catch {
+
+            } catch {
                 await setError(error: error)
             }
         }
     }
-    
-    func createDocumentAtFirebase(_ post: Post)async throws {
+
+    func createDocumentAtFirebase(_ post: Post) async throws {
         let doc = Firestore.firestore().collection("Posts").document()
-        let _ = try doc.setData(from: post, completion:  {error in
+        let _ = try doc.setData(from: post, completion: { error in
             if error == nil {
                 isLoading = false
                 onPost(post)
@@ -214,19 +195,19 @@ struct CreateNewPost: View {
             }
         })
     }
-    
-    func setError(error: Error)async {
-        await MainActor.run(body: {
+
+    func resetFields() {
+        postTitle = ""
+        postText = ""
+        postImageData = nil
+        selectedImage = nil
+        selectedTab = .home
+    }
+
+    func setError(error: Error) async {
+        await MainActor.run {
             errorMessage = error.localizedDescription
             showError.toggle()
-        })
-    }
-}
-
-struct CreateNewPost_Previews: PreviewProvider {
-    static var previews: some View {
-        CreateNewPost{_ in
-            
         }
     }
 }

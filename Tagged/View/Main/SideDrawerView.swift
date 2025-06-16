@@ -1,17 +1,28 @@
 import SwiftUI
 
+// MARK: - TaggedGroup Model
+
+// Represents a user group with an ID, title, and icon name.
 struct TaggedGroup: Identifiable {
     let id = UUID()
     let title: String
     let imageName: String
 }
 
+// MARK: - SideDrawerView
+
+// Sidebar menu view for switching groups and navigating to group-related actions.
 struct SideDrawerView: View {
+    
+    // MARK: - Bindings
+
     @Binding var activeGroupID: UUID
     @Binding var showMenu: Bool
     @Binding var showJoinModal: Bool
     @Binding var showCreatePage: Bool
     @Binding var showGroupsPage: Bool
+
+    // MARK: - Mock Group List (Replace with dynamic data in production)
 
     let groups: [TaggedGroup] = [
         TaggedGroup(title: "Sentinel Gifted", imageName: "person.crop.circle.fill"),
@@ -21,9 +32,13 @@ struct SideDrawerView: View {
         TaggedGroup(title: "Grad 2025", imageName: "person.crop.circle.fill")
     ]
 
+    // MARK: - Body
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Action Buttons
+
+            // MARK: - Top Action Buttons
+
             VStack(alignment: .leading, spacing: 12) {
                 GroupActionButton(
                     icon: "plus",
@@ -35,23 +50,23 @@ struct SideDrawerView: View {
                         }
                     }
                 )
+
                 GroupActionButton(
                     icon: "person.2.fill",
                     title: "Join a Group",
                     action: {
                         showMenu = false
-                        // Slight delay ensures modal shows AFTER sidebar closes
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                             showJoinModal = true
                         }
                     }
                 )
+
                 GroupActionButton(
                     icon: "magnifyingglass",
                     title: "Public Groups",
                     action: {
                         showMenu = false
-                        // Slight delay ensures modal shows AFTER sidebar closes
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                             showGroupsPage = true
                         }
@@ -64,7 +79,8 @@ struct SideDrawerView: View {
 
             Divider().padding(.bottom, 6)
 
-            // Group list
+            // MARK: - Group List Section
+
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(groups) { group in
@@ -87,8 +103,9 @@ struct SideDrawerView: View {
                             .padding(.vertical, 12)
                             .padding(.horizontal, 16)
                             .background(
-                                activeGroupID == group.id ?
-                                Color.gray.opacity(0.12) : Color.clear
+                                activeGroupID == group.id
+                                    ? Color.gray.opacity(0.12)
+                                    : Color.clear
                             )
                         }
                         .buttonStyle(PlainButtonStyle())
@@ -103,11 +120,13 @@ struct SideDrawerView: View {
     }
 }
 
-// MARK: - Reusable Styled Action Button
+// MARK: - GroupActionButton
+
+// Reusable sidebar button for triggering group-related actions.
 struct GroupActionButton: View {
     var icon: String
     var title: String
-    var iconSize: CGFloat = 22
+    var iconSize: CGFloat = 18
     var action: () -> Void
 
     var body: some View {
@@ -117,10 +136,10 @@ struct GroupActionButton: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: iconSize, height: iconSize)
-                    .frame(width: 22) // 👈 ensures both icons take up equal width
+                    .frame(width: 18) // Ensures all icons align horizontally
 
                 Text(title)
-                    .font(.system(size: 19, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .alignmentGuide(.firstTextBaseline) { d in d[.firstTextBaseline] }
             }
             .foregroundColor(.accentColor)

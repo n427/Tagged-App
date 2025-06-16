@@ -1,34 +1,41 @@
 import SwiftUI
 
+// MARK: - JoinGroupModal
+// A modal overlay for joining a group using a room code
 struct JoinGroupModal: View {
-    @Binding var isPresented: Bool
-    @State private var groupCode: String = ""
+    @Binding var isPresented: Bool // Controls whether the modal is shown
+    @State private var groupCode: String = "" // User-entered group code
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.3)
-                .ignoresSafeArea()
+            // MARK: - Background Dim Layer
+            Color.black.opacity(0.3) // Semi-transparent black background
+                .ignoresSafeArea() // Extends behind safe area edges
                 .onTapGesture {
-                    isPresented = false
+                    isPresented = false // Dismiss when background is tapped
                 }
 
+            // MARK: - Modal Content
             VStack(spacing: 20) {
+                // Title
                 Text("Join a Group")
                     .font(.title3)
                     .fontWeight(.semibold)
 
+                // MARK: - TextField for Group Code
                 TextField("Enter room code", text: $groupCode)
                     .padding(.horizontal)
-                    .padding(.vertical, 12) // Increase vertical touch area
+                    .padding(.vertical, 12) // Better touch area
                     .background(
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(Color.gray.opacity(0.4), lineWidth: 1)
                     )
                     .padding(.horizontal)
 
+                // MARK: - Join Button
                 Button(action: {
-                    // 🔁 Handle join logic here
-                    isPresented = false
+                    // Handle join logic here
+                    isPresented = false // Dismiss modal after tap
                 }) {
                     Image(systemName: "plus")
                         .foregroundColor(.white)
@@ -41,11 +48,12 @@ struct JoinGroupModal: View {
                 }
 
             }
-            .padding(.vertical, 30)
-            .background(Color.white)
+            .padding(.top, 30)
+            .padding(.bottom, 20)
+            .background(Color.white) // Modal background
             .cornerRadius(16)
-            .padding(.horizontal, 40)
-            .shadow(radius: 10)
+            .padding(.horizontal, 40) // Horizontal inset from screen edges
+            .shadow(radius: 10) // Soft shadow for elevation
         }
     }
 }

@@ -2,17 +2,28 @@ import SwiftUI
 import SDWebImageSwiftUI
 import FirebaseFirestore
 
+// MARK: - UserSearchView
+
+// Displays a searchable list of all users using Firestore data.
 struct UserSearchView: View {
+
+    // MARK: - State
+
     @State private var searchText = ""
     @State private var allUsers: [User] = []
     @State private var isLoading = true
 
+    // MARK: - Body
+
     var body: some View {
         VStack(spacing: 0) {
-            // 🔍 Custom search bar
+
+            // MARK: - Search Bar
+
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.gray)
+
                 TextField("Search", text: $searchText)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
@@ -23,11 +34,16 @@ struct UserSearchView: View {
             .padding(.horizontal)
             .padding(.top, 10)
 
+            // MARK: - Loading Indicator
+
             if isLoading {
                 Spacer()
                 ProgressView()
                 Spacer()
             } else {
+
+                // MARK: - User List
+
                 List {
                     ForEach(filteredUsers()) { user in
                         NavigationLink {
@@ -54,6 +70,8 @@ struct UserSearchView: View {
                     }
                 }
                 .listStyle(.plain)
+                
+                .padding(.top, 15)
             }
         }
         .navigationTitle("Search")
@@ -63,6 +81,9 @@ struct UserSearchView: View {
         }
     }
 
+    // MARK: - Filter Logic
+
+    // Filters users based on the current search query.
     func filteredUsers() -> [User] {
         if searchText.isEmpty {
             return allUsers
@@ -74,16 +95,21 @@ struct UserSearchView: View {
         }
     }
 
+    // MARK: - Fetch Users
+
+    // Fetches all user documents from Firestore and decodes them into `User` models.
     func fetchAllUsers() async {
         do {
             let snapshot = try await Firestore.firestore().collection("Users").getDocuments()
             let users = try snapshot.documents.compactMap { doc in
                 try doc.data(as: User.self)
             }
+
             await MainActor.run {
                 self.allUsers = users
                 self.isLoading = false
             }
+
         } catch {
             print("Error fetching users: \(error.localizedDescription)")
             await MainActor.run {

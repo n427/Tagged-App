@@ -1,25 +1,39 @@
 import SwiftUI
 import PhotosUI
 
+// MARK: - ImagePicker: UIViewControllerRepresentable
+
+/// A wrapper for PHPickerViewController to allow SwiftUI image selection.
 struct ImagePicker: UIViewControllerRepresentable {
+    
+    // MARK: - Bindings
+    
     @Binding var selectedImage: UIImage?
     @Binding var showPhotoError: Bool
 
+    // MARK: - Make PHPickerViewController
+    
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var config = PHPickerConfiguration()
         config.selectionLimit = 1
         config.filter = .images
-
+        
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
         return picker
     }
 
-    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {
+        // No update logic needed
+    }
 
+    // MARK: - Coordinator
+    
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
+
+    // MARK: - Coordinator Class
 
     class Coordinator: NSObject, PHPickerViewControllerDelegate {
         let parent: ImagePicker

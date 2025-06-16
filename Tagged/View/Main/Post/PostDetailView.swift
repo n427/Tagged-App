@@ -2,6 +2,7 @@ import SwiftUI
 import SDWebImageSwiftUI
 import Firebase
 import FirebaseStorage
+import FirebaseFirestore
 
 struct PostDetailView: View {
     @State private var commentText: String = ""
@@ -18,7 +19,9 @@ struct PostDetailView: View {
     var onDelete: () -> ()
     
     var body: some View {
-        ScrollView {
+        ZStack {
+            SwipeBackEnabler()
+            
             if isFetching {
                 ProgressView()
                     .padding(.top, 30)
@@ -90,122 +93,133 @@ struct PostDetailView: View {
                         }
                     }
                     .padding(.horizontal)
-                    .padding(.vertical, 10)
+                    .padding(.top, 10)
+                    .padding(.bottom, 15)
                     .background(Color.white)
                     
-                    ZStack {
-                        Color.gray.opacity(0.1)
-
-                        WebImage(url: post.imageURL)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.width)
-                            .clipped()
-                    }
-                    .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.width)
-                    .allowsHitTesting(false) // ✅ prevents intercepting taps
-
-                    
-                    // User + Caption
-                    VStack(alignment: .leading, spacing: 4) {
-                        
-                        HStack(alignment: .center) {
-                            Text(post.title)
-                                .font(.system(size: 18, weight: .semibold))
+                    ScrollView {
+                        ZStack {
+                            Color.gray.opacity(0.1)
                             
-                            Spacer()
-                            
-                            Button(action: likePost) {
-                                Image(systemName: post.likedIDs.contains(userUID) ? "heart.fill" : "heart")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(width: 25, height: 25) // fixed size
-                                    .foregroundColor(post.likedIDs.contains(userUID) ? .red : .black)
-                            }
-                            
-                            Text("\(post.likedIDs.count)")
-                                .font(.system(size: 14, weight: .semibold))
+                            WebImage(url: post.imageURL)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.width)
+                                .clipped()
                         }
-                        .padding(.vertical, 5)
+                        .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.width)
+                        .allowsHitTesting(false) // ✅ prevents intercepting taps
                         
-                        Text(post.text)
-                            .font(.system(size: 14))
-                            .foregroundColor(.gray)
                         
-                        Text(post.publishedDate.formatted(date: .numeric, time: .shortened))
-                            .font(.system(size: 12))
-                            .foregroundColor(.gray.opacity(0.7))
-                            .padding(.top, 4)
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-                    
-                    Divider()
-                    
-                    // Comments Label
-                    Text("Comments")
-                        .font(.system(size: 18, weight: .semibold))
-                        .padding(.horizontal)
-                        .padding(.top, 15)
-                        .padding(.bottom, 10)
-                    
-                    HStack(alignment: .center, spacing: 8) {
-                        
-                        Image(systemName: "person.crop.circle.fill")
-                            .resizable()
-                            .frame(width: 28, height: 28)
-                            .clipShape(Circle())
-                        
-                        ZStack(alignment: .bottomTrailing) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.white)
-                            
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                            
-                            HStack(alignment: .bottom, spacing: 6) {
-                                TextField("Write a comment...", text: $commentText, axis: .vertical)
-                                    .font(.system(size: 14))
-                                    .lineLimit(5)
-                                    .padding(.vertical, 10)
-                                    .padding(.leading, 12)
+                        // User + Caption
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(alignment: .center) {
+                                Text(post.title)
+                                    .font(.system(size: 18, weight: .bold))
                                 
-                                Button(action: {
-                                    commentText = ""
-                                }) {
-                                    Image(systemName: "paperplane.fill")
-                                        .font(.system(size: 16, weight: .bold))
-                                        .foregroundColor(Color.accentColor)
+                                Spacer()
+
+                                HStack(spacing: 4) {
+                                    Button(action: likePost) {
+                                        Image(systemName: post.likedIDs.contains(userUID) ? "heart.fill" : "heart")
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fit)
+                                            .frame(width: 25, height: 25)
+                                            .foregroundColor(post.likedIDs.contains(userUID) ? .red : .black)
+                                    }
+                                    .frame(width: 30, height: 30) // ensures consistent button width even if tapped
+
+                                    Text("\(post.likedIDs.count)")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .frame(minWidth: 25, alignment: .leading) // optional: prevents shifting when numbers grow
                                 }
-                                .padding(.trailing, 12)
-                                .padding(.bottom, 8)
+                                .padding(.trailing, -5)
                             }
-                            .padding(.vertical, 2)
+                            .padding(.vertical, 5)
+
+                            Text(post.text)
+                                .font(.system(size: 14))
+                                .foregroundColor(.black)
+
+                            Text(post.publishedDate.formatted(date: .numeric, time: .shortened))
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray.opacity(0.7))
+                                .padding(.top, 4)
                         }
-                        .padding(.leading, 5)
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 7)
-                    .padding(.bottom, 10)
-                    
-                    
-                    // Comment List
-                    VStack(spacing: 30) {
-                        ForEach(sampleComments) { comment in
-                            commentRow(comment: comment)
+                        .padding(.horizontal)
+                        .padding(.vertical, 6)
+
+                        
+                        Divider()
+                        
+                        // Comments Label
+                        HStack {
+                            Text("Comments")
+                                .font(.system(size: 18, weight: .semibold))
+                            Spacer()
                         }
+                        .padding(.leading, 15)
+                        .padding(.top, 10)
+                        .padding(.bottom, 5)
+                        
+                        HStack(alignment: .center, spacing: 8) {
+                            
+                            Image(systemName: "person.crop.circle.fill")
+                                .resizable()
+                                .frame(width: 28, height: 28)
+                                .clipShape(Circle())
+                            
+                            ZStack(alignment: .bottomTrailing) {
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(Color.white)
+                                
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                
+                                HStack(alignment: .bottom, spacing: 6) {
+                                    TextField("Write a comment...", text: $commentText, axis: .vertical)
+                                        .font(.system(size: 14))
+                                        .lineLimit(5)
+                                        .textFieldStyle(.automatic) // <- important
+                                        .padding(.vertical, 10)
+                                        .padding(.leading, 12)
+                                    
+                                    Button(action: {
+                                        commentText = ""
+                                    }) {
+                                        Image(systemName: "paperplane.fill")
+                                            .font(.system(size: 16, weight: .bold))
+                                            .foregroundColor(Color.accentColor)
+                                    }
+                                    .padding(.trailing, 12)
+                                    .padding(.bottom, 8)
+                                }
+                                .padding(.vertical, 2)
+                            }
+                            .padding(.leading, 5)
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 7)
+                        .padding(.bottom, 10)
+                        
+                        
+                        // Comment List
+                        VStack(spacing: 30) {
+                            ForEach(sampleComments) { comment in
+                                commentRow(comment: comment)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal)
                     }
-                    .padding(.top, 8)
-                    .padding(.horizontal)
-                }
-                .onTapGesture {
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    .scrollDismissesKeyboard(.interactively)
                 }
             }
 
         }
-        .navigationBarBackButtonHidden(true)
-        .navigationBarHidden(true)
+        .navigationBarBackButtonHidden(false) // allow default gesture
+        .navigationBarHidden(true) // hide only the visual bar
+        
         .onAppear {
             if docListener == nil {
                 guard let postID = post.id else{return}

@@ -1,14 +1,17 @@
-//
-//  LoadingView.swift
-//  Tagged
-//
-//  Created by Nicole Zhang on 2025-05-24.
-//
-
 import SwiftUI
 
+// MARK: - LoadingView
+
+// A reusable loading overlay with a centered `ProgressView`
+// Displays when `show` is true, with a smooth fade animation.
 struct LoadingView: View {
+    
+    // MARK: - Properties
+    
     @Binding var show: Bool
+
+    // MARK: - Body
+    
     var body: some View {
         ZStack {
             if show {

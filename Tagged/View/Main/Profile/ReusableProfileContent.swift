@@ -1,11 +1,13 @@
 import SwiftUI
 import SDWebImageSwiftUI
 import Firebase
+import FirebaseFirestore
+
+// MARK: - ReusableProfileContent
 
 struct ReusableProfileContent: View {
     var user: User
     var isMyProfile: Bool
-
     var logOutAction: (() -> Void)? = nil
     var deleteAccountAction: (() -> Void)? = nil
 
@@ -14,6 +16,7 @@ struct ReusableProfileContent: View {
     @State private var isFetching: Bool = false
     @State private var paginationDoc: QueryDocumentSnapshot?
 
+    // 3-column grid layout
     let columns = [
         GridItem(.flexible(), spacing: 6),
         GridItem(.flexible(), spacing: 6),
@@ -24,11 +27,13 @@ struct ReusableProfileContent: View {
         GeometryReader { geometry in
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 16) {
+
+                    // MARK: - Profile Header
+
                     Text(user.username)
                         .font(.system(size: 28, weight: .bold))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 20)
-                        .padding(.bottom, 5)
                         .padding(.horizontal)
 
                     HStack(alignment: .top, spacing: 16) {
@@ -46,10 +51,9 @@ struct ReusableProfileContent: View {
                             HStack(spacing: 35) {
                                 statView("\(fetchedPosts.count)", "posts")
                                 statView("80", "likes")
-                                statView("#4", "rank")
+                                statView("300", "points")
                             }
                         }
-
                         Spacer()
                     }
                     .padding(.horizontal)
@@ -66,6 +70,8 @@ struct ReusableProfileContent: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
 
+                    // MARK: - Bio
+
                     HStack(spacing: 0) {
                         Text(user.userBio)
                             .font(.subheadline)
@@ -77,13 +83,25 @@ struct ReusableProfileContent: View {
                     .padding(.horizontal)
                     .padding(.top, -10)
 
+                    // MARK: - Buttons
+
                     if isMyProfile {
                         HStack(spacing: 16) {
-                            profileButton("Edit Profile") {}
+                            NavigationLink(destination: EditProfileView()) {
+                                Text("Edit Profile")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(Color.accentColor)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 7)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 7)
+                                            .stroke(Color.accentColor, lineWidth: 1)
+                                    )
+                            }
                             profileButton("Settings") {
                                 showSettings.toggle()
                             }
-                            .confirmationDialog("Settings", isPresented: $showSettings, titleVisibility: .visible) {
+                            .confirmationDialog("Settings", isPresented: $showSettings) {
                                 Button(role: .none) {
                                     logOutAction?()
                                 } label: {
@@ -110,7 +128,8 @@ struct ReusableProfileContent: View {
                         .padding(.horizontal)
                         .padding(.bottom, 5)
 
-                    // Grid of post images
+                    // MARK: - Grid of Posts
+
                     if isFetching {
                         ProgressView().padding(.top, 30)
                     } else if fetchedPosts.isEmpty {
@@ -119,33 +138,34 @@ struct ReusableProfileContent: View {
                             .foregroundColor(.gray)
                             .padding(.top, 30)
                     } else {
-                        LazyVGrid(
-                            columns: Array(repeating: GridItem(.flexible(), spacing: 20), count: 3),
-                            spacing: 6 // vertical spacing between rows
-                        ) {
+                        LazyVGrid(columns: columns, spacing: 4) {
                             ForEach(fetchedPosts) { post in
-                                NavigationLink(
-                                    destination: PostDetailView(
-                                        post: post,
-                                        onUpdate: { updatedPost in
-                                            if let index = fetchedPosts.firstIndex(where: { $0.id == updatedPost.id }) {
-                                                fetchedPosts[index].likedIDs = updatedPost.likedIDs
+                                ZStack {
+                                    NavigationLink {
+                                        PostDetailView(
+                                            post: post,
+                                            onUpdate: { updatedPost in
+                                                if let index = fetchedPosts.firstIndex(where: { $0.id == updatedPost.id }) {
+                                                    fetchedPosts[index].likedIDs = updatedPost.likedIDs
+                                                }
+                                            },
+                                            onDelete: {
+                                                withAnimation(.easeInOut(duration: 0.25)) {
+                                                    fetchedPosts.removeAll { $0.id == post.id }
+                                                }
                                             }
-                                        },
-                                        onDelete: {
-                                            withAnimation(.easeInOut(duration: 0.25)) {
-                                                fetchedPosts.removeAll { $0.id == post.id }
-                                            }
-                                        }
-                                    )
-                                ) {
-                                    WebImage(url: post.imageURL)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: imageSize(), height: imageSize())
-                                        .clipped()
+                                        )
+                                    } label: {
+                                        WebImage(url: post.imageURL)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: imageSize(), height: imageSize())
+                                            .clipped()
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
                                 }
-                                .buttonStyle(PlainButtonStyle())
+                                .contentShape(Rectangle()) // Makes the entire tile tappable
+                                .id(post.id) // Prevents index mismatch on reuse
                                 .onAppear {
                                     if post.id == fetchedPosts.last?.id && paginationDoc != nil {
                                         Task { await fetchPosts() }
@@ -154,6 +174,7 @@ struct ReusableProfileContent: View {
                             }
                         }
                         .padding(.horizontal, 15)
+                        .padding(.bottom, 20)
                     }
                 }
                 .padding(.horizontal, 10)
@@ -172,14 +193,15 @@ struct ReusableProfileContent: View {
         .padding(.top, -15)
     }
 
+    // MARK: - Helpers
+
     func imageSize() -> CGFloat {
-        let totalSpacing: CGFloat = 20 * 2     // spacing between 3 columns
-        let totalPadding: CGFloat = 6 * 2     // horizontal padding
         let screenWidth = UIScreen.main.bounds.width
+        let totalSpacing: CGFloat = 25 * 2
+        let totalPadding: CGFloat = 4 * 2
         return (screenWidth - totalSpacing - totalPadding) / 3
     }
 
-    
     func statView(_ number: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(number).bold()
@@ -201,6 +223,8 @@ struct ReusableProfileContent: View {
                 )
         }
     }
+
+    // MARK: - Firestore Pagination
 
     func fetchPosts() async {
         await MainActor.run { isFetching = true }
