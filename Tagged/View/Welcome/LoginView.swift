@@ -137,6 +137,7 @@ struct LoginView: View {
             } catch {
                 await setError(error)
             }
+
         }
     }
 

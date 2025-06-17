@@ -15,21 +15,25 @@ struct ProfileView: View {
 
     var body: some View {
         NavigationStack {
-            if let myProfile {
-                // Profile display with logout and delete actions
+            if let unwrappedProfile = myProfile {
                 ReusableProfileContent(
-                    user: myProfile,
+                    user: unwrappedProfile,
                     isMyProfile: true,
                     logOutAction: logOutUser,
-                    deleteAccountAction: deleteAccount
+                    deleteAccountAction: deleteAccount,
+                    onUpdate: {
+                        Task {
+                            await fetchUserData()
+                        }
+                    }
                 )
                 .padding(.top, 12)
                 .refreshable {
                     // Pull to refresh reloads profile data
                     self.myProfile = nil
                     await fetchUserData()
-                }
-            } else {
+            }
+            }else {
                 // Empty view while loading
                 Color.clear
             }

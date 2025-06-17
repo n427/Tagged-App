@@ -104,16 +104,17 @@ struct RegisterView: View {
 
                     // MARK: - Input Fields
 
-                    Group {
+                    SwiftUI.Group {
                         TextField("Name (optional)", text: $name)
                             .textInputAutocapitalization(.never)
 
                         TextField("Username", text: $username)
                             .textInputAutocapitalization(.never)
 
-                        TextField("Bio (optional)", text: $bio)
+                        TextField("Bio (optional)", text: $bio, axis: .vertical)
                             .frame(height: 100, alignment: .top)
                             .textInputAutocapitalization(.never)
+                            .lineLimit(5)
 
                         TextField("Email", text: $email)
                             .textInputAutocapitalization(.never)
@@ -214,7 +215,8 @@ struct RegisterView: View {
                     userBio: bio,
                     userUID: userUID,
                     userEmail: email,
-                    userProfileURL: downloadURL
+                    userProfileURL: downloadURL,
+                    userLikeCount: 0
                 )
 
                 let encodedUser = try Firestore.Encoder().encode(user)

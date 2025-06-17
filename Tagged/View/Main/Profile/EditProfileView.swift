@@ -1,5 +1,9 @@
 import SwiftUI
 import PhotosUI
+import Firebase
+import FirebaseAuth
+import FirebaseFirestore
+import FirebaseStorage
 
 // MARK: - RegisterView
 
@@ -18,6 +22,19 @@ struct EditProfileView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var showImagePicker = false
     @State private var userProfilePicData: Data?
+    
+    // MARK: - AppStorage (to keep data in sync with main app)
+    @AppStorage("user_UID") private var userUID: String = ""
+    @AppStorage("user_name") private var storedUsername: String = ""
+    @AppStorage("user_profile_url") private var profileURL: URL?
+
+    // MARK: - Error & Loading
+    @State private var isLoading = false
+    @State private var errorMessage = ""
+    @State private var showError = false
+    
+    @Environment(\.dismiss) private var dismiss
+    var onUpdate: (() -> Void)? = nil
 
     var body: some View {
         VStack {
@@ -71,16 +88,17 @@ struct EditProfileView: View {
                     }
 
                     // MARK: - Input Fields
-                    Group {
+                    SwiftUI.Group {
                         TextField("Name (optional)", text: $name)
                             .textInputAutocapitalization(.never)
 
                         TextField("Username", text: $username)
                             .textInputAutocapitalization(.never)
 
-                        TextField("Bio (optional)", text: $bio)
+                        TextField("Bio (optional)", text: $bio, axis: .vertical)
                             .frame(height: 100, alignment: .top)
                             .textInputAutocapitalization(.never)
+                            .lineLimit(5)
 
                         TextField("Email", text: $email)
                             .textInputAutocapitalization(.never)
@@ -99,9 +117,9 @@ struct EditProfileView: View {
                     )
                     .padding(.horizontal, 10)
 
-                    // MARK: - Register Button
+                    // MARK: - Save Button
                     Button(action: {
-                        // TODO: Implement registration logic
+                        saveChanges()
                     }) {
                         Text("Save Changes")
                             .foregroundColor(.white)
@@ -111,21 +129,119 @@ struct EditProfileView: View {
                             .background(Color.accentColor)
                             .cornerRadius(10)
                     }
-                    .disableWithOpacity(
-                        userProfilePicData == nil ||
-                        username.isEmpty ||
-                        email.isEmpty ||
-                        password.isEmpty ||
-                        confirmPassword != password ||
-                        confirmPassword.isEmpty
-                    )
                     .padding(.horizontal, 10)
-
-                    Spacer()
+                    .padding(.vertical, 15)
                 }
                 .padding()
             }
+            .scrollDismissesKeyboard(.interactively)
+            .refreshable {
+                await loadUserData()
+            }
         }
-        .navigationBarBackButtonHidden(false)
+        .onAppear {
+            Task { await loadUserData() }
+        }
+        .overlay {
+            if isLoading {
+                ProgressView()
+            }
+        }
     }
+    
+    func loadUserData() async {
+        await MainActor.run { isLoading = true }
+
+        do {
+            let doc = try await Firestore.firestore()
+                .collection("Users")
+                .document(userUID)
+                .getDocument(as: User.self)
+
+            var imageData: Data? = nil
+
+            if let url = doc.userProfileURL {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                imageData = data
+            }
+
+            await MainActor.run {
+                name = doc.name
+                username = doc.username
+                bio = doc.userBio
+                email = doc.userEmail
+                profileURL = doc.userProfileURL
+                userProfilePicData = imageData
+                isLoading = false // ✅ Hide loader after finished
+            }
+
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                showError = true
+                isLoading = false
+            }
+        }
+    }
+    
+    func saveChanges() {
+        isLoading = true
+        closeKeyboard()
+
+        Task {
+            var downloadURL: URL? = profileURL
+
+            do {
+                // 1. Upload new profile image if changed
+                if let imageData = userProfilePicData {
+                    let ref = Storage.storage().reference().child("Profile_Images").child(userUID)
+                    _ = try await ref.putDataAsync(imageData)
+                    downloadURL = try await ref.downloadURL()
+                }
+
+                // 2. Update Firestore fields
+                let userRef = Firestore.firestore().collection("Users").document(userUID)
+                var updateData: [String: Any] = [
+                    "username": username,
+                    "name": name,
+                    "userBio": bio,
+                    "userEmail": email,
+                ]
+                if let url = downloadURL {
+                    updateData["userProfileURL"] = url.absoluteString
+                }
+
+                try await userRef.updateData(updateData)
+
+                // Update local
+                storedUsername = username
+                profileURL = downloadURL
+
+                // Update auth
+                if let currentUser = Auth.auth().currentUser {
+                    if email != currentUser.email {
+                        try await currentUser.updateEmail(to: email)
+                    }
+                    if !password.isEmpty {
+                        try await currentUser.updatePassword(to: password)
+                    }
+                }
+
+                await MainActor.run {
+                    isLoading = false
+                }
+                onUpdate?()
+                dismiss()
+                
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    showError = true
+                    isLoading = false
+                }
+            }
+        }
+
+    }
+
 }

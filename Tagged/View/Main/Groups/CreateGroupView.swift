@@ -1,4 +1,7 @@
 import SwiftUI
+import FirebaseStorage
+import FirebaseAuth
+import FirebaseFirestore
 import PhotosUI
 
 // MARK: - View for creating a new group, including metadata and game mode selection.
@@ -18,9 +21,9 @@ struct CreateGroupView: View {
     @State private var captions: [String] = [""]
 
     // Image selection
-    @State private var selectedImage: UIImage? = nil
     @State private var photoItem: PhotosPickerItem?
     @State private var showImagePicker = false
+    @State private var groupPicData: Data?
 
     // View dismissal binding
     @Binding var isPresented: Bool
@@ -31,10 +34,13 @@ struct CreateGroupView: View {
                 VStack(spacing: 20) {
 
                     // Group image selection
-                    Button(action: { showImagePicker = true }) {
+                    Button(action: {
+                        showImagePicker = true
+                    }) {
                         ZStack {
-                            if let selectedImage {
-                                Image(uiImage: selectedImage)
+                            if let groupPicData,
+                               let image = UIImage(data: groupPicData) {
+                                Image(uiImage: image)
                                     .resizable()
                                     .scaledToFill()
                                     .frame(width: 120, height: 120)
@@ -52,12 +58,16 @@ struct CreateGroupView: View {
                         }
                     }
                     .photosPicker(isPresented: $showImagePicker, selection: $photoItem)
-                    .onChange(of: photoItem) { _, newItem in
-                        guard let newItem else { return }
+                    .onChange(of: photoItem) { _, newValue in
+                        guard let newValue else { return }
                         Task {
-                            if let data = try? await newItem.loadTransferable(type: Data.self),
-                               let image = UIImage(data: data) {
-                                selectedImage = image
+                            do {
+                                guard let imageData = try await newValue.loadTransferable(type: Data.self) else { return }
+                                await MainActor.run {
+                                    groupPicData = imageData
+                                }
+                            } catch {
+                                print("Image loading error:", error)
                             }
                         }
                     }
@@ -130,6 +140,7 @@ struct CreateGroupView: View {
 
                     // Submit button
                     Button(action: {
+                        createGroup()
                         isPresented = false
                     }) {
                         Text("Create Group")
@@ -141,6 +152,7 @@ struct CreateGroupView: View {
                             .cornerRadius(10)
                             .padding(.horizontal)
                     }
+                    .disableWithOpacity(groupPicData == nil || groupName.isEmpty || groupDescription.isEmpty || roomCode.isEmpty || captions.first?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
                 }
                 .padding(.vertical)
             }
@@ -154,6 +166,52 @@ struct CreateGroupView: View {
             }
         }
     }
+    
+    func createGroup() {
+        guard let userUID = Auth.auth().currentUser?.uid else { return }
+
+        Task {
+            var imageURL: URL? = nil
+
+            // Upload group image
+            if let imageData = groupPicData {
+                let ref = Storage.storage().reference()
+                    .child("Group_Images/\(UUID().uuidString).jpg")
+
+                do {
+                    _ = try await ref.putDataAsync(imageData)
+                    imageURL = try await ref.downloadURL()
+                } catch {
+                    print("Image upload failed:", error)
+                    return
+                }
+            }
+
+            // Prepare Firestore data
+            let groupData: [String: Any] = [
+                "title": groupName,
+                "description": groupDescription,
+                "detailedDescription": detailedDescription,
+                "roomCode": roomCode,
+                "isPlayMode": isPlayMode,
+                "hasPunishment": hasPunishment,
+                "captions": captions,
+                "imageURL": imageURL?.absoluteString ?? "",
+                "createdBy": userUID,
+                "createdAt": Timestamp(date: Date())
+            ]
+
+            do {
+                _ = try await Firestore.firestore().collection("Groups").addDocument(data: groupData)
+                await MainActor.run {
+                    isPresented = false
+                }
+            } catch {
+                print("❌ Failed to create group:", error)
+            }
+        }
+    }
+
 }
 
 // Custom text field styling

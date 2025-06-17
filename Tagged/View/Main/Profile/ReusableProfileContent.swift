@@ -6,10 +6,12 @@ import FirebaseFirestore
 // MARK: - ReusableProfileContent
 
 struct ReusableProfileContent: View {
-    var user: User
+    @State var user: User
     var isMyProfile: Bool
+    
     var logOutAction: (() -> Void)? = nil
     var deleteAccountAction: (() -> Void)? = nil
+    var onUpdate: (() -> Void)? = nil
 
     @State private var showSettings = false
     @State private var fetchedPosts: [Post] = []
@@ -50,7 +52,7 @@ struct ReusableProfileContent: View {
 
                             HStack(spacing: 35) {
                                 statView("\(fetchedPosts.count)", "posts")
-                                statView("80", "likes")
+                                statView("\(user.userLikeCount ?? 0)", "likes")
                                 statView("300", "points")
                             }
                         }
@@ -87,7 +89,9 @@ struct ReusableProfileContent: View {
 
                     if isMyProfile {
                         HStack(spacing: 16) {
-                            NavigationLink(destination: EditProfileView()) {
+                            NavigationLink(destination: EditProfileView(onUpdate: {
+                                onUpdate?()
+                            })) {
                                 Text("Edit Profile")
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundColor(Color.accentColor)
@@ -187,6 +191,7 @@ struct ReusableProfileContent: View {
             .refreshable {
                 fetchedPosts = []
                 paginationDoc = nil
+                await fetchUserData()
                 await fetchPosts()
             }
         }
@@ -252,6 +257,21 @@ struct ReusableProfileContent: View {
         } catch {
             print("Error fetching posts: \(error.localizedDescription)")
             await MainActor.run { isFetching = false }
+        }
+    }
+    
+    func fetchUserData() async {
+        do {
+            let doc = try await Firestore.firestore()
+                .collection("Users")
+                .document(user.userUID)
+                .getDocument(as: User.self)
+
+            await MainActor.run {
+                user = doc
+            }
+        } catch {
+            print("❌ Failed to refresh user:", error.localizedDescription)
         }
     }
 }

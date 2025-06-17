@@ -12,11 +12,13 @@ struct PostDetailView: View {
     @State var isFetching: Bool = false
     
     @AppStorage("user_UID") private var userUID: String = ""
+    @AppStorage("user_profile_url") private var profileURL: URL?
     @State private var docListener: ListenerRegistration?
     
     @State var post: Post
     var onUpdate: (Post) -> ()
     var onDelete: () -> ()
+    @State private var comments: [Comment] = []
     
     var body: some View {
         ZStack {
@@ -164,7 +166,7 @@ struct PostDetailView: View {
                         
                         HStack(alignment: .center, spacing: 8) {
                             
-                            Image(systemName: "person.crop.circle.fill")
+                            WebImage(url: profileURL)
                                 .resizable()
                                 .frame(width: 28, height: 28)
                                 .clipShape(Circle())
@@ -185,7 +187,20 @@ struct PostDetailView: View {
                                         .padding(.leading, 12)
                                     
                                     Button(action: {
-                                        commentText = ""
+                                        let trimmedComment = commentText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                        guard !trimmedComment.isEmpty else { return }
+                                        Task {
+                                            do {
+                                                let userDoc = try await Firestore.firestore()
+                                                    .collection("Users")
+                                                    .document(userUID)
+                                                    .getDocument(as: User.self)
+                                                try await postComment(for: post.id ?? "", text: commentText, user: userDoc)
+                                                commentText = ""
+                                            } catch {
+                                                print("Failed to post comment:", error)
+                                            }
+                                        }
                                     }) {
                                         Image(systemName: "paperplane.fill")
                                             .font(.system(size: 16, weight: .bold))
@@ -205,7 +220,7 @@ struct PostDetailView: View {
                         
                         // Comment List
                         VStack(spacing: 30) {
-                            ForEach(sampleComments) { comment in
+                            ForEach(comments) { comment in
                                 commentRow(comment: comment)
                             }
                         }
@@ -222,23 +237,27 @@ struct PostDetailView: View {
         
         .onAppear {
             if docListener == nil {
-                guard let postID = post.id else{return}
-                docListener = Firestore.firestore().collection("Posts").document(postID).addSnapshotListener({snapshot,
-                        error in
-                    if let snapshot {
-                        if snapshot.exists{
+                guard let postID = post.id else { return }
+
+                docListener = Firestore.firestore()
+                    .collection("Posts")
+                    .document(postID)
+                    .addSnapshotListener { snapshot, error in
+                        if let snapshot, snapshot.exists {
                             if let updatedPost = try? snapshot.data(as: Post.self) {
                                 post = updatedPost
                                 onUpdate(updatedPost)
                             }
-                        }
-                        else {
+                        } else {
                             onDelete()
                         }
                     }
-                })
+
+                // ✅ Start listening for comments too!
+                listenToComments(for: postID)
             }
         }
+
         .refreshable {
             
         }
@@ -251,20 +270,37 @@ struct PostDetailView: View {
     }
 
     func likePost() {
-        Task {
-            guard let postID = post.id else {return}
-            if post.likedIDs.contains(userUID) {
-                try await Firestore.firestore().collection("Posts").document(postID).updateData([
-                    "likedIDs": FieldValue.arrayRemove([userUID])
-                ])
-            }else {
-                try await Firestore.firestore().collection("Posts").document(postID).updateData([
-                    "likedIDs": FieldValue.arrayUnion([userUID])
-                ])
+        guard let postID = post.id else { return }
+        let postRef = Firestore.firestore().collection("Posts").document(postID)
+        let userRef = Firestore.firestore().collection("Users").document(post.userUID)
+
+        Firestore.firestore().runTransaction({ transaction, errorPointer in
+            do {
+                let postSnapshot = try transaction.getDocument(postRef)
+                var likedIDs = postSnapshot.get("likedIDs") as? [String] ?? []
+
+                let isLiked = likedIDs.contains(userUID)
+                if isLiked {
+                    likedIDs.removeAll { $0 == userUID }
+                    transaction.updateData(["userPoints": FieldValue.increment(Int64(-1))], forDocument: userRef)
+                } else {
+                    likedIDs.append(userUID)
+                    transaction.updateData(["userPoints": FieldValue.increment(Int64(1))], forDocument: userRef)
+                }
+
+                transaction.updateData(["likedIDs": likedIDs], forDocument: postRef)
+
+            } catch {
+                errorPointer?.pointee = error as NSError
+            }
+            return nil
+        }) { _, error in
+            if let error = error {
+                print("Transaction failed: \(error.localizedDescription)")
             }
         }
     }
-    
+
     func deletePost() {
         Task {
             do {
@@ -283,57 +319,106 @@ struct PostDetailView: View {
         }
     }
     
+    func postComment(for postID: String, text: String, user: User) async throws {
+        let commentRef = Firestore.firestore()
+            .collection("Posts")
+            .document(postID)
+            .collection("comments")
+            .document()
+
+        let newComment = Comment(
+            id: commentRef.documentID,
+            text: text,
+            userUID: user.userUID,
+            username: user.username,
+            userProfileURL: user.userProfileURL,
+            timestamp: Date(),
+            likedBy: []
+        )
+
+        try commentRef.setData(from: newComment)
+    }
+
+    func listenToComments(for postID: String) {
+        Firestore.firestore()
+            .collection("Posts")
+            .document(postID)
+            .collection("comments")
+            .order(by: "timestamp", descending: false)
+            .addSnapshotListener { snapshot, error in
+                guard let documents = snapshot?.documents else { return }
+
+                comments = documents.compactMap { doc in
+                    do {
+                        return try doc.data(as: Comment.self)
+                    } catch {
+                        print("❌ Failed to decode comment:", doc.data())
+                        print("Error:", error)
+                        return nil
+                    }
+                }
+            }
+    }
+
+    
     func commentRow(comment: Comment) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top) {
-                Image(systemName: "person.crop.circle.fill")
-                    .resizable()
-                    .frame(width: 28, height: 28)
+        HStack(alignment: .top, spacing: 10) {
+            WebImage(url: comment.userProfileURL)
+                .resizable()
+                .frame(width: 28, height: 28)
+                .clipShape(Circle())
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(comment.username)
+                    .font(.system(size: 14))
+                    .foregroundColor(.accentColor)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(comment.username)
-                        .font(.system(size: 14))
-                        .foregroundColor(.accentColor.opacity(0.5))
+                Text(comment.text)
+                    .font(.system(size: 14))
+                    .foregroundColor(.primary)
+                
+                    .padding(.top, 4)
 
-                    Text(comment.text)
-                        .font(.system(size: 14))
-                        .foregroundColor(.primary)
-                    
-                        .padding(.top, 4)
+                Text(comment.timestamp.formatted(date: .abbreviated, time: .shortened))
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                    .padding(.top, 4)
+            }
 
-                    Text(comment.date)
-                        .font(.system(size: 12))
-                        .foregroundColor(.gray)
-                        .padding(.top, 4)
-                }
-                .padding(.leading, 5)
+            Spacer()
 
-                Spacer()
-
-                VStack(spacing: 4) {
-                    Image(systemName: "heart")
+            VStack(spacing: 4) {
+                Button {
+                    toggleLikeOnComment(comment)
+                } label: {
+                    Image(systemName: (comment.likedBy ?? []).contains(userUID) ? "heart.fill" : "heart")
                         .font(.system(size: 16))
-                        .foregroundColor(.gray)
-                    Text("\(comment.likes)")
-                        .font(.system(size: 12))
-                        .foregroundColor(.gray)
+                        .foregroundColor((comment.likedBy ?? []).contains(userUID) ? .red : .gray)
                 }
+
+                Text("\((comment.likedBy ?? []).count)")
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
         }
     }
-}
+    
+    func toggleLikeOnComment(_ comment: Comment) {
+        guard let commentID = comment.id, let postID = post.id else { return }
 
-struct Comment: Identifiable {
-    let id = UUID()
-    let username: String
-    let text: String
-    let date: String
-    let likes: Int
-}
+        let ref = Firestore.firestore()
+            .collection("Posts")
+            .document(postID)
+            .collection("comments")
+            .document(commentID)
 
-let sampleComments: [Comment] = [
-    Comment(username: "venus", text: "early 2024 & a couple weeks ago ♡", date: "2 days ago", likes: 7),
-    Comment(username: "Michelle Solano", text: "Omgg i loved your pink hair", date: "3 days ago", likes: 1),
-    Comment(username: "Eli", text: "I think I have non I only have grow older 🤣", date: "2 days ago", likes: 7),
-    Comment(username: "Obnauseous", text: "glow up by turning the lights off? 😭", date: "2 days ago", likes: 4)
-]
+        let alreadyLiked = (comment.likedBy ?? []).contains(userUID)
+
+        ref.updateData([
+            "likedBy": alreadyLiked ?
+                FieldValue.arrayRemove([userUID]) :
+                FieldValue.arrayUnion([userUID])
+        ])
+    }
+
+}
