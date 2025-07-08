@@ -27,6 +27,10 @@ struct CreateGroupView: View {
 
     // View dismissal binding
     @Binding var isPresented: Bool
+    
+    @State private var showCodeAlert = false
+    @State private var isSaving      = false      // optional: grey-out button
+
 
     var body: some View {
         NavigationView {
@@ -122,12 +126,7 @@ struct CreateGroupView: View {
                     // Game mode toggle (Play / Explore)
                     GroupModeSelector(isPlayMode: $isPlayMode)
                         .padding(.top, 15)
-
-                    // Punishment toggle (only shown in Play mode)
-                    if isPlayMode {
-                        PunishmentToggle(hasPunishment: $hasPunishment)
-                    }
-
+                    
                     // Caption list with reordering and optional generation
                     ReorderableListSection(
                         title: "Tags",
@@ -139,11 +138,8 @@ struct CreateGroupView: View {
                     .padding(.top, 15)
 
                     // Submit button
-                    Button(action: {
-                        createGroup()
-                        isPresented = false
-                    }) {
-                        Text("Create Group")
+                    Button(action: { Task { await checkAndCreateGroup() } }) {
+                        Text(isSaving ? "Saving…" : "Create Group")
                             .foregroundColor(.white)
                             .fontWeight(.bold)
                             .padding()
@@ -152,10 +148,17 @@ struct CreateGroupView: View {
                             .cornerRadius(10)
                             .padding(.horizontal)
                     }
-                    .disableWithOpacity(groupPicData == nil || groupName.isEmpty || groupDescription.isEmpty || roomCode.isEmpty || captions.first?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                    .disabled(isSaving || groupPicData == nil
+                              || groupName.isEmpty || groupDescription.isEmpty
+                              || roomCode.isEmpty
+                              || (captions.first?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true))
                 }
                 .padding(.vertical)
             }
+            .alert("Room Code Already Exists",
+                   isPresented: $showCodeAlert,
+                   actions: { Button("OK", role: .cancel) { } },
+                   message: { Text("Please choose a different room code.") })
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Create Group")
             .navigationBarTitleDisplayMode(.inline)
@@ -167,50 +170,128 @@ struct CreateGroupView: View {
         }
     }
     
-    func createGroup() {
-        guard let userUID = Auth.auth().currentUser?.uid else { return }
+    func checkAndCreateGroup() async {
+        isSaving = true
 
-        Task {
-            var imageURL: URL? = nil
+        do {
+            let snap = try await Firestore.firestore()
+                .collection("Groups")
+                .whereField("roomCode", isEqualTo: roomCode)
+                .limit(to: 1)
+                .getDocuments()
 
-            // Upload group image
-            if let imageData = groupPicData {
-                let ref = Storage.storage().reference()
-                    .child("Group_Images/\(UUID().uuidString).jpg")
-
-                do {
-                    _ = try await ref.putDataAsync(imageData)
-                    imageURL = try await ref.downloadURL()
-                } catch {
-                    print("Image upload failed:", error)
-                    return
+            if !snap.isEmpty {
+                await MainActor.run {
+                    isSaving = false
+                    showCodeAlert = true
                 }
+                return
             }
 
-            // Prepare Firestore data
+            await createGroup()  // proceed only if code doesn't exist
+
+        } catch {
+            print("❌ Error checking for duplicate code:", error)
+            isSaving = false
+        }
+    }
+
+    // MARK: - Create group and mirror it to JoinedGroups
+    func createGroup() {
+        guard let user = Auth.auth().currentUser else { return }
+        let userUID = user.uid
+
+        Task {
+            var imageURLString = ""
+
+            // 1️⃣ Upload image (optional)
+            if let data = groupPicData {
+                let ref = Storage.storage().reference()
+                    .child("Group_Images/\(UUID().uuidString).jpg")
+                try? await ref.putDataAsync(data)
+                imageURLString = (try? await ref.downloadURL().absoluteString) ?? ""
+            }
+
+            // 2️⃣ Prepare tag arrays
+            let trimmed        = captions.map { $0.trimmingCharacters(in: .whitespaces) }
+                                         .filter { !$0.isEmpty }
+            let currentTag     = trimmed.first ?? "No tag set"
+            let queuedTags     = Array(trimmed.dropFirst())
+            let nextSwitchDate = Timestamp(date: getNextSunday1159pmPST())
+
+            // 3️⃣ Build Firestore payload
             let groupData: [String: Any] = [
-                "title": groupName,
-                "description": groupDescription,
-                "detailedDescription": detailedDescription,
-                "roomCode": roomCode,
-                "isPlayMode": isPlayMode,
-                "hasPunishment": hasPunishment,
-                "captions": captions,
-                "imageURL": imageURL?.absoluteString ?? "",
-                "createdBy": userUID,
-                "createdAt": Timestamp(date: Date())
+                "title":              groupName,
+                "description":        groupDescription,
+                "detailedDescription":detailedDescription,
+                "roomCode":           roomCode,
+                "isPlayMode":         isPlayMode,
+                "hasPunishment":      hasPunishment,
+                "imageURL":           imageURLString,
+                "createdBy":          userUID,
+                "createdAt":          Timestamp(date: Date()),
+                "adminID":            userUID,
+                "members":            [userUID],
+
+                // Tag fields
+                "currentTag":         currentTag,
+                "queuedTags":         queuedTags,
+                "pastTags":           [],
+                "nextTagSwitchDate":  nextSwitchDate
             ]
 
             do {
-                _ = try await Firestore.firestore().collection("Groups").addDocument(data: groupData)
-                await MainActor.run {
-                    isPresented = false
+                // 4️⃣ Add to Groups
+                let groupRef = try await Firestore.firestore()
+                    .collection("Groups")
+                    .addDocument(data: groupData)
+                let groupID = groupRef.documentID
+
+                // 5️⃣ Mirror to Users/{uid}/JoinedGroups
+                let joinedRef = Firestore.firestore()
+                    .collection("Users")
+                    .document(userUID)
+                    .collection("JoinedGroups")
+                    .document(groupID)
+
+                // pull the just-created doc into the Group model ➜ strip id ➜ encode
+                let snapshot = try await groupRef.getDocument()
+                if var meta = try? snapshot.data(as: Group.self) {
+                    // Ensure groupMeta contains id
+                    let encodedMeta = try Firestore.Encoder().encode(meta)
+
+                    let joinedData: [String: Any] = [
+                        "groupMeta":    encodedMeta,
+                        "streak":       0,
+                        "points":       0,
+                        "lastPostDate": FieldValue.serverTimestamp(),
+                        "lastTagWeek":  NSNull()
+                    ]
+                    try await joinedRef.setData(joinedData)
                 }
+
+
+                // 6️⃣ Make this the active group locally
+                UserDefaults.standard.set(groupID, forKey: "active_group_id")
+
+                await MainActor.run { isPresented = false }
+
             } catch {
                 print("❌ Failed to create group:", error)
             }
         }
     }
+
+    // Helper – next Sunday 23:59 PT
+    func getNextSunday1159pmPST() -> Date {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        let now = Date()
+        let nextSun = cal.nextDate(after: now, matching: DateComponents(weekday: 1),
+                                   matchingPolicy: .nextTime)!
+        return cal.date(bySettingHour: 23, minute: 59, second: 0, of: nextSun)!
+    }
+
 
 }
 
@@ -330,7 +411,7 @@ struct PunishmentToggle: View {
                 .fontWeight(.semibold)
                 .padding(.leading)
             
-            Text("Enable/disable making users who break their streaks hidden for a week and lose 20% of their points")
+            Text("Enable/disable making users who break their streaks lose 20% of their points")
                 .font(.caption)
                 .foregroundColor(.gray)
                 .padding(.leading)

@@ -5,6 +5,8 @@ import FirebaseStorage
 import FirebaseFirestore
 
 struct CreateNewPost: View {
+    @ObservedObject var groupsVM: GroupsViewModel
+    
     var onPost: (Post) -> ()
 
     @FocusState private var focusedField: Field?
@@ -169,12 +171,42 @@ struct CreateNewPost: View {
                     let _ = try await storageRef.putDataAsync(data)
                     let downloadURL = try await storageRef.downloadURL()
 
-                    let post = Post(title: postTitle, text: postText, imageURL: downloadURL, imageReferenceID: imageReferenceID, userName: username, userUID: userUID, userProfileURL: profileURL)
-                    try await createDocumentAtFirebase(post)
+                    //guard let activeTag = groupsVM.currentTag else {
+                        //await setError(error: NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Missing tag."]))
+                       // return
+                    //}
 
+                    let post = Post(
+                        title: postTitle,
+                        text: postText,
+                        imageURL: downloadURL,
+                        imageReferenceID: imageReferenceID,
+                        //tag: activeTag, // ✅ include tag here
+                        userName: username,
+                        userUID: userUID,
+                        userProfileURL: profileURL
+                    )
+
+                    try await createDocumentAtFirebase(post)
+                    
+                    guard let activeGroupID = groupsVM.activeGroupID else { return }
+                    await groupsVM.handleStreak(for: userUID, groupId: activeGroupID)
                     resetFields()
                 } else {
-                    let post = Post(title: postTitle, text: postText, userName: username, userUID: userUID, userProfileURL: profileURL)
+                    //guard let activeTag = groupsVM.currentTag else {
+                        //await setError(error: NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Missing tag."]))
+                       // return
+                  //  }
+
+                    let post = Post(
+                        title: postTitle,
+                        text: postText,
+                       // tag: activeTag, // ✅ include tag here
+                        userName: username,
+                        userUID: userUID,
+                        userProfileURL: profileURL
+                    )
+
                     try await createDocumentAtFirebase(post)
                     resetFields()
                 }
@@ -186,11 +218,14 @@ struct CreateNewPost: View {
     }
 
     func createDocumentAtFirebase(_ post: Post) async throws {
+        var updatedPost = post
+        updatedPost.groupID = groupsVM.activeGroupID
+
         let doc = Firestore.firestore().collection("Posts").document()
-        let _ = try doc.setData(from: post, completion: { error in
+        let _ = try doc.setData(from: updatedPost, completion: { error in
             if error == nil {
                 isLoading = false
-                onPost(post)
+                onPost(updatedPost)
                 dismiss()
             }
         })

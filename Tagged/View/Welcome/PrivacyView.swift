@@ -66,6 +66,6 @@ struct PrivacyView: View {
             }
             .padding()
         }
-        .navigationBarBackButtonHidden(false)
+        .navigationTitle("Privacy Policy")
     }
 }

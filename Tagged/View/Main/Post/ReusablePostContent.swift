@@ -6,10 +6,12 @@ import FirebaseFirestore
 struct ReusablePostContent: View {
     var basedOnUID: Bool = false
     var uid: String = ""
+    var activeGroupID: String? = nil
     
     @Binding var posts: [Post]
     @State private var isFetching: Bool = false
     @State private var paginationDoc: QueryDocumentSnapshot?
+    @State private var streakCache: [String: Int] = [:]
     
     let columns = [
             GridItem(.flexible(), spacing: 12),
@@ -41,17 +43,18 @@ struct ReusablePostContent: View {
         }
         .task {
             if posts.isEmpty {
-                paginationDoc = nil  // reset pagination if needed
+                paginationDoc = nil
                 await fetchPosts()
             }
         }
 
         .refreshable {
-            guard basedOnUID else{return}
+            guard basedOnUID else { return }
             posts = []
             paginationDoc = nil
             await fetchPosts()
         }
+
     }
     
     @ViewBuilder
@@ -73,15 +76,43 @@ struct ReusablePostContent: View {
                 )
                 .toolbar(.hidden, for: .tabBar)
             } label: {
-                ExploreCard(post: post)
+                ExploreCard(post: post, userStreak: streakCache[post.userUID] ?? 0)
                     .contentShape(Rectangle()) // 👈 Ensures the entire card is tappable, no spillover
             }
             .buttonStyle(PlainButtonStyle()) // Prevents button effects
             .onAppear {
+                if streakCache[post.userUID] == nil {
+                    Task { await fetchStreak(for: post.userUID, in: post.groupID) }
+                }
                 if post.id == posts.last?.id && paginationDoc != nil {
                     Task { await fetchPosts() }
                 }
             }
+
+        }
+    }
+
+
+    func fetchStreak(for posterUID: String, in groupID: String?) async {
+        guard
+            !posterUID.isEmpty,
+            let gid = groupID,            // unwrap safely
+            !gid.isEmpty
+        else { return }
+
+        do {
+            let snap = try await Firestore.firestore()
+                .collection("Users")
+                .document(posterUID)
+                .collection("JoinedGroups")
+                .document(gid)
+                .getDocument()
+
+            let streak = snap["streak"] as? Int ?? 0
+            await MainActor.run { streakCache[posterUID] = streak }
+
+        } catch {
+            print("❌ fetchStreak error:", error.localizedDescription)
         }
     }
 
@@ -142,7 +173,8 @@ struct RoundedCorner: Shape {
 
 struct ExploreCard: View {
     let post: Post
-
+    let userStreak: Int
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             GeometryReader { geo in
@@ -166,8 +198,10 @@ struct ExploreCard: View {
             HStack {
                 WebImage(url: post.userProfileURL)
                     .resizable()
-                    .frame(width: 18, height: 18)
+                    .scaledToFill()
                     .clipShape(Circle())
+                    .clipped()
+                    .frame(width: 18, height: 18)
 
                 Text(post.userName)
                     .font(.caption)
@@ -181,7 +215,7 @@ struct ExploreCard: View {
                 HStack(spacing: 4) {
                     Text("🔥")
                         .font(.system(size: 11))
-                    Text("3")
+                    Text("\(userStreak)")
                         .font(.system(size: 11))
                         .fontWeight(.semibold)
                 }

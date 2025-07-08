@@ -6,26 +6,31 @@ import FirebaseFirestore
 // MARK: - ProfileView
 
 struct ProfileView: View {
-    @State private var myProfile: User? // Holds the current user's profile
-    @AppStorage("log_status") var logStatus: Bool = false // Login state
+    @State private var myProfile: User?
+    @AppStorage("log_status") var logStatus: Bool = false
+    @State private var errorMessage: String = ""
+    @State private var showError: Bool = false
+    @State private var isLoading: Bool = false
 
-    @State private var errorMessage: String = "" // Error message text
-    @State private var showError: Bool = false // Toggles error alert
-    @State private var isLoading: Bool = false // Toggles loading view
+    // Inject these from parent
+    @ObservedObject var groupsVM: GroupsViewModel
+    var activeGroupID: String?
+
 
     var body: some View {
+        let selectedGroupAdminID = groupsVM.myJoinedGroups
+            .first { $0.groupID == activeGroupID }?
+            .groupMeta.adminID
         NavigationStack {
             if let unwrappedProfile = myProfile {
                 ReusableProfileContent(
                     user: unwrappedProfile,
                     isMyProfile: true,
+                    selectedGroupAdminID: selectedGroupAdminID,
+                    activeGroupID: activeGroupID,
                     logOutAction: logOutUser,
                     deleteAccountAction: deleteAccount,
-                    onUpdate: {
-                        Task {
-                            await fetchUserData()
-                        }
-                    }
+                    onUpdate: { Task { await fetchUserData() } }
                 )
                 .padding(.top, 12)
                 .refreshable {
@@ -85,24 +90,64 @@ struct ProfileView: View {
         isLoading = true
         Task {
             do {
-                guard let userUID = Auth.auth().currentUser?.uid else { return }
+                guard let user = Auth.auth().currentUser else { return }
+                let uid = user.uid
+                let db = Firestore.firestore()
+                let storage = Storage.storage()
 
-                // Delete profile image from Storage
-                let reference = Storage.storage()
-                    .reference()
+                // 1️⃣ Delete profile image from Storage
+                try? await storage.reference()
                     .child("Profile_Images")
-                    .child(userUID)
-                try await reference.delete()
-
-                // Delete user document from Firestore
-                try await Firestore.firestore()
-                    .collection("Users")
-                    .document(userUID)
+                    .child(uid)
                     .delete()
 
-                // Delete account from Firebase Auth
-                try await Auth.auth().currentUser?.delete()
-                logStatus = false
+                // 2️⃣ Fetch groupIDs from JoinedGroups
+                let joinedSnap = try await db.collection("Users")
+                    .document(uid)
+                    .collection("JoinedGroups")
+                    .getDocuments()
+                let groupIDs = joinedSnap.documents.map { $0.documentID }
+
+                // 3️⃣ Batch remove from group members and delete joined mirrors
+                let batch = db.batch()
+                for gid in groupIDs {
+                    let groupRef = db.collection("Groups").document(gid)
+                    let joinedRef = db.collection("Users").document(uid)
+                        .collection("JoinedGroups").document(gid)
+
+                    batch.updateData(["members": FieldValue.arrayRemove([uid])], forDocument: groupRef)
+                    batch.deleteDocument(joinedRef)
+                }
+
+                // 4️⃣ Delete `Usernames/{username}` and `Users/{uid}`
+                let username = user.displayName ?? uid
+                batch.deleteDocument(db.collection("Usernames").document(username))
+                batch.deleteDocument(db.collection("Users").document(uid))
+                try await batch.commit()
+
+                // 5️⃣ Delete their posts and post images
+                let postSnap = try await db.collection("Posts")
+                    .whereField("userUID", isEqualTo: uid)
+                    .getDocuments()
+
+                for doc in postSnap.documents {
+                    if let ref = doc["imageReferenceID"] as? String {
+                        try? await storage.reference()
+                            .child("Post_Images")
+                            .child(ref)
+                            .delete()
+                    }
+                    try? await doc.reference.delete()
+                }
+
+                // 6️⃣ Finally, delete Firebase Auth account
+                try await user.delete()
+
+                // 7️⃣ Log user out
+                await MainActor.run {
+                    logStatus = false
+                }
+
             } catch {
                 await setError(error)
             }
@@ -118,13 +163,5 @@ struct ProfileView: View {
             errorMessage = error.localizedDescription
             showError.toggle()
         }
-    }
-}
-
-// MARK: - Preview
-
-struct ProfileView_Previews: PreviewProvider {
-    static var previews: some View {
-        ProfileView()
     }
 }

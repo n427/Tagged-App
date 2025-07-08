@@ -16,7 +16,7 @@ struct User: Identifiable, Codable {
     var userUID: String
     var userEmail: String
     var userProfileURL: URL?
-    var userLikeCount: Int?
+    var userLikeCount: Int = 0
     
     enum CodingKeys: String, CodingKey {
         case id

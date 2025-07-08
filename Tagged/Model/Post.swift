@@ -1,10 +1,3 @@
-//
-//  Post.swift
-//  Tagged
-//
-//  Created by Nicole Zhang on 2025-05-27.
-//
-
 import SwiftUI
 import FirebaseFirestoreSwift
 
@@ -21,6 +14,9 @@ struct Post: Identifiable, Codable, Equatable {
     var userUID: String
     var userProfileURL: URL
     
+    var groupID: String?
+    var tag: String = ""
+    
     enum CodingKeys: CodingKey {
         case id
         case title
@@ -32,5 +28,7 @@ struct Post: Identifiable, Codable, Equatable {
         case userName
         case userUID
         case userProfileURL
+        case groupID
+        case tag
     }
 }

@@ -1,36 +1,20 @@
 import SwiftUI
-
-// MARK: - TaggedGroup Model
-
-// Represents a user group with an ID, title, and icon name.
-struct TaggedGroup: Identifiable {
-    let id = UUID()
-    let title: String
-    let imageName: String
-}
+import SDWebImageSwiftUI
+import FirebaseFirestore
 
 // MARK: - SideDrawerView
 
 // Sidebar menu view for switching groups and navigating to group-related actions.
 struct SideDrawerView: View {
     
-    // MARK: - Bindings
-
-    @Binding var activeGroupID: UUID
+    @ObservedObject var groupsVM: GroupsViewModel
+    @Binding var activeGroupID: String?
     @Binding var showMenu: Bool
     @Binding var showJoinModal: Bool
     @Binding var showCreatePage: Bool
     @Binding var showGroupsPage: Bool
-
-    // MARK: - Mock Group List (Replace with dynamic data in production)
-
-    let groups: [TaggedGroup] = [
-        TaggedGroup(title: "Sentinel Gifted", imageName: "person.crop.circle.fill"),
-        TaggedGroup(title: "Math Contests", imageName: "person.crop.circle.fill"),
-        TaggedGroup(title: "Dance Club", imageName: "person.crop.circle.fill"),
-        TaggedGroup(title: "AP Calc BC", imageName: "person.crop.circle.fill"),
-        TaggedGroup(title: "Grad 2025", imageName: "person.crop.circle.fill")
-    ]
+    
+    @AppStorage("user_UID") private var userUID: String = ""
 
     // MARK: - Body
 
@@ -77,46 +61,72 @@ struct SideDrawerView: View {
             .padding(.top, 20)
             .padding(.bottom, 10)
 
-            Divider().padding(.bottom, 6)
+            Divider()
 
             // MARK: - Group List Section
 
             ScrollView {
                 VStack(spacing: 0) {
-                    ForEach(groups) { group in
-                        Button(action: {
+                    ForEach(sortedGroups) { joined in
+                        let group = joined.groupMeta
+
+                        Button {
+                            // 1) activate locally
                             activeGroupID = group.id
                             showMenu = false
-                        }) {
+
+                            // 2) update lastOpened in Firestore
+                            Task {
+                                try? await Firestore.firestore()
+                                    .collection("Users")
+                                    .document(userUID)
+                                    .collection("JoinedGroups")
+                                    .document(group.id ?? "")
+                                    .updateData(["lastOpened": FieldValue.serverTimestamp()])
+                            }
+                        } label: {
                             HStack(spacing: 12) {
-                                Image(systemName: group.imageName)
+                                WebImage(url: group.imageURL)
                                     .resizable()
-                                    .scaledToFit()
+                                    .scaledToFill()
                                     .frame(width: 30, height: 30)
-                                    .foregroundColor(.gray)
+                                    .clipShape(Circle())
 
                                 Text(group.title)
-                                    .font(.system(size: 15, weight: .medium))
+                                    .font(.system(size: 15, weight: .bold))
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
 
                                 Spacer()
                             }
                             .padding(.vertical, 12)
                             .padding(.horizontal, 16)
                             .background(
-                                activeGroupID == group.id
-                                    ? Color.gray.opacity(0.12)
-                                    : Color.clear
+                                (activeGroupID != nil && activeGroupID == group.id) ?
+                                    Color.accentColor.opacity(0.15) : Color.clear
                             )
                         }
-                        .buttonStyle(PlainButtonStyle())
                     }
                 }
+            }
+            .refreshable {
+                await groupsVM.refreshJoinedGroups()   // simple `getDocuments()`
             }
 
             Spacer()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white)
+    }
+
+    // MARK: - Helpers
+
+    private var sortedGroups: [JoinedGroup] {
+        groupsVM.myJoinedGroups.sorted { (a: JoinedGroup, b: JoinedGroup) in
+            let dateA = a.lastOpened?.dateValue() ?? Date.distantPast
+            let dateB = b.lastOpened?.dateValue() ?? Date.distantPast
+            return dateA > dateB
+        }
     }
 }
 

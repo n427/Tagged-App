@@ -1,17 +1,16 @@
 import SwiftUI
+import FirebaseFirestore
 
 // MARK: - Tab Enum
-
 enum Tab: String {
     case home, messages, create, crown, profile
 }
 
 // MARK: - Main View
-
 struct MainView: View {
     // MARK: - AppStorage & State
-
     @AppStorage("selected_tab") private var selectedTabRaw: String = Tab.home.rawValue
+    @AppStorage("user_UID") private var userUID: String = ""
 
     @State private var showMenu = false
     @State private var showCreatePage = false
@@ -19,75 +18,79 @@ struct MainView: View {
     @State private var showGroupsPage = false
     @State private var showSearch = false
     @State private var showSettings = false
-
-    @State private var activeGroupID: UUID = UUID()
     @State private var explorePosts: [Post] = []
     @State private var exploreViewID = UUID()
+    @State private var hasSetInitialGroup = false
 
-    // MARK: - Computed Tab Binding
+    @StateObject private var groupsVM = GroupsViewModel(userUID: UserDefaults.standard.string(forKey: "user_UID") ?? "")
+
+    var isAdminOfActiveGroup: Bool {
+        guard
+            let activeID = groupsVM.activeGroupID,
+            let group = groupsVM.myJoinedGroups.first(where: { $0.groupID == activeID })
+        else { return false }
+
+        return group.groupMeta.adminID == userUID
+    }
 
     var selectedTab: Tab {
         get { Tab(rawValue: selectedTabRaw) ?? .home }
         set { selectedTabRaw = newValue.rawValue }
     }
 
-    // MARK: - Body
-
     var body: some View {
         NavigationStack {
             ZStack {
                 VStack(spacing: 0) {
-                    HeaderView(showMenu: $showMenu, showSearch: $showSearch, showSettings: $showSettings)
+                    HeaderView(
+                        showMenu: $showMenu,
+                        showSearch: $showSearch,
+                        showSettings: $showSettings,
+                        isAdmin: isAdminOfActiveGroup
+                    )
 
-                    Divider()
-                        .frame(height: 0.5)
-                        .background(Color.gray.opacity(0.3))
+                    Divider().frame(height: 0.5).background(Color.gray.opacity(0.3))
 
                     // MARK: - Tab Content
-
                     ZStack {
                         switch selectedTab {
                         case .home:
-                            ExploreView(posts: $explorePosts)
-                                .id(exploreViewID) // force refresh
+                            ExploreView(activeGroupID: groupsVM.activeGroupID)
+                                .id(groupsVM.activeGroupID)
                         case .messages:
-                            YearbookView()
+                            LeaderboardView(groupsVM: groupsVM)
                         case .create:
-                            CreateNewPost { newPost in
+                            CreateNewPost(groupsVM: groupsVM) { _ in
                                 explorePosts = []
                                 exploreViewID = UUID()
                                 selectedTabRaw = Tab.home.rawValue
                             }
                         case .crown:
-                            LeaderboardView()
+                            LeaderboardView(groupsVM: groupsVM)
                         case .profile:
-                            ProfileView()
+                            ProfileView(groupsVM: groupsVM, activeGroupID: groupsVM.activeGroupID)
                         }
                     }
                     .navigationBarHidden(true)
 
-                    Divider()
-                        .frame(height: 0.5)
-                        .background(Color.gray.opacity(0.3))
+                    Divider().frame(height: 0.5).background(Color.gray.opacity(0.3))
 
                     CustomTabBar(selectedTab: Binding(
-                        get: { Tab(rawValue: selectedTabRaw) ?? .home },
+                        get: { selectedTab },
                         set: { selectedTabRaw = $0.rawValue }
                     ))
                 }
                 .ignoresSafeArea(.keyboard)
 
                 // MARK: - Overlays
-
                 if showMenu {
                     Color.black.opacity(0.3)
                         .ignoresSafeArea()
-                        .onTapGesture {
-                            withAnimation { showMenu = false }
-                        }
+                        .onTapGesture { withAnimation { showMenu = false } }
 
                     SideDrawerView(
-                        activeGroupID: $activeGroupID,
+                        groupsVM: groupsVM,
+                        activeGroupID: $groupsVM.activeGroupID,
                         showMenu: $showMenu,
                         showJoinModal: $showJoinModal,
                         showCreatePage: $showCreatePage,
@@ -100,8 +103,7 @@ struct MainView: View {
                 }
 
                 if showJoinModal {
-                    JoinGroupModal(isPresented: $showJoinModal)
-                        .zIndex(2)
+                    JoinGroupModal(isPresented: $showJoinModal, groupsVM: groupsVM).zIndex(2)
                 }
 
                 if showCreatePage {
@@ -111,20 +113,40 @@ struct MainView: View {
                 }
 
                 if showGroupsPage {
-                    ViewPublicGroupsView(isPresented: $showGroupsPage)
+                    ViewPublicGroupsView(isPresented: $showGroupsPage, groupsVM: groupsVM)
                         .transition(.move(edge: .trailing))
                         .zIndex(2)
                 }
             }
             .navigationDestination(isPresented: $showSearch) {
-                UserSearchView()
+                UserSearchView(groupsVM: groupsVM)
             }
             .fullScreenCover(isPresented: $showSettings) {
-                SettingsView(isPresented: $showSettings)
+                SettingsView(isPresented: $showSettings, groupsVM: groupsVM)
+            }
+        }
+
+        .task {
+            if !hasSetInitialGroup, let first = groupsVM.myJoinedGroups.first {
+                groupsVM.activeGroupID = first.groupID
+                hasSetInitialGroup = true
+            }
+            
+            // Wait for groups to fully populate
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            await groupsVM.resetMissedStreaksIfNeeded()
+        }
+
+
+        .onChange(of: groupsVM.myJoinedGroups) { newGroups in
+            if !hasSetInitialGroup, let first = newGroups.first {
+                groupsVM.activeGroupID = first.groupID
+                hasSetInitialGroup = true
             }
         }
     }
 }
+
 
 // MARK: - CustomTabBar
 

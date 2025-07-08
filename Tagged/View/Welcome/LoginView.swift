@@ -176,19 +176,10 @@ struct LoginView: View {
 
     func setError(_ error: Error) async {
         await MainActor.run {
-            errorMessage = error.localizedDescription
-            showError.toggle()
+            errorMessage = "Incorrect email or password. Please try again."
+            showError = true
             isLoading = false
         }
     }
-}
 
-// MARK: - Preview
-
-struct LoginView_Previews: PreviewProvider {
-    @State static var path = NavigationPath()
-
-    static var previews: some View {
-        LoginView(path: $path)
-    }
 }

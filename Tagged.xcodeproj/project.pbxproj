@@ -29,9 +29,12 @@
 		BB62EB752DE6287E00EC235B /* Post.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB62EB742DE6287E00EC235B /* Post.swift */; };
 		BB70EF142DF680B800F0159F /* ReusablePostContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB70EF132DF680B800F0159F /* ReusablePostContent.swift */; };
 		BB7B5AFF2DFB8EE60023B651 /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7B5AFE2DFB8EDF0023B651 /* EditProfileView.swift */; };
+		BB8C7D8D2E14B14F00155F1D /* YearbookViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8C7D8C2E14B14A00155F1D /* YearbookViewModel.swift */; };
 		BB9005142DF012B30039BC8A /* PostDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9005132DF012B30039BC8A /* PostDetailView.swift */; };
 		BB9005182DF0D28C0039BC8A /* YearbookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9005172DF0D28C0039BC8A /* YearbookView.swift */; };
 		BB90051A2DF0F25E0039BC8A /* SideDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9005192DF0F25E0039BC8A /* SideDrawerView.swift */; };
+		BB98BEA82E14B57C0087878E /* GroupsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB98BEA72E14B5770087878E /* GroupsViewModel.swift */; };
+		BB98BEAA2E14C1B00087878E /* JoinedGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB98BEA92E14C1AD0087878E /* JoinedGroup.swift */; };
 		BB9C869E2DE2EBAD00CAA51A /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9C869D2DE2EBAD00CAA51A /* LoadingView.swift */; };
 		BBAEBCC72DF8F1E300FC613C /* KeyboardResponder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBAEBCC62DF8F18900FC613C /* KeyboardResponder.swift */; };
 		BBAEBCC92DF962E500FC613C /* NavigationConfigurator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBAEBCC82DF962E300FC613C /* NavigationConfigurator.swift */; };
@@ -92,9 +95,12 @@
 		BB62EB742DE6287E00EC235B /* Post.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Post.swift; sourceTree = "<group>"; };
 		BB70EF132DF680B800F0159F /* ReusablePostContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReusablePostContent.swift; sourceTree = "<group>"; };
 		BB7B5AFE2DFB8EDF0023B651 /* EditProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
+		BB8C7D8C2E14B14A00155F1D /* YearbookViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YearbookViewModel.swift; sourceTree = "<group>"; };
 		BB9005132DF012B30039BC8A /* PostDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailView.swift; sourceTree = "<group>"; };
 		BB9005172DF0D28C0039BC8A /* YearbookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YearbookView.swift; sourceTree = "<group>"; };
 		BB9005192DF0F25E0039BC8A /* SideDrawerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideDrawerView.swift; sourceTree = "<group>"; };
+		BB98BEA72E14B5770087878E /* GroupsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupsViewModel.swift; sourceTree = "<group>"; };
+		BB98BEA92E14C1AD0087878E /* JoinedGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinedGroup.swift; sourceTree = "<group>"; };
 		BB9C869D2DE2EBAD00CAA51A /* LoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingView.swift; sourceTree = "<group>"; };
 		BBAEBCC62DF8F18900FC613C /* KeyboardResponder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardResponder.swift; sourceTree = "<group>"; };
 		BBAEBCC82DF962E300FC613C /* NavigationConfigurator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationConfigurator.swift; sourceTree = "<group>"; };
@@ -291,6 +297,9 @@
 		BBD781332DE1676E000A539C /* Model */ = {
 			isa = PBXGroup;
 			children = (
+				BB98BEA92E14C1AD0087878E /* JoinedGroup.swift */,
+				BB98BEA72E14B5770087878E /* GroupsViewModel.swift */,
+				BB8C7D8C2E14B14A00155F1D /* YearbookViewModel.swift */,
 				BB4F3B292E013B18002C2B21 /* Group.swift */,
 				BB094CC02DFFC0B80064CB0B /* Comment.swift */,
 				BBCD1C1B2DE29870001588EA /* User.swift */,
@@ -442,6 +451,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BB4F3B2A2E013B1B002C2B21 /* Group.swift in Sources */,
+				BB98BEA82E14B57C0087878E /* GroupsViewModel.swift in Sources */,
 				BBC20E1E2DE0EE6400781D93 /* ContentView.swift in Sources */,
 				BB49E81E2DE50A5B0015BBDA /* MainView.swift in Sources */,
 				BB49E8202DE5342D0015BBDA /* ProfileView.swift in Sources */,
@@ -465,6 +475,7 @@
 				BB49E81B2DE50A1D0015BBDA /* RegisterView.swift in Sources */,
 				BBAEBCC72DF8F1E300FC613C /* KeyboardResponder.swift in Sources */,
 				BB61EAE32DF2A4E0005F62DF /* ViewPublicGroupsView.swift in Sources */,
+				BB8C7D8D2E14B14F00155F1D /* YearbookViewModel.swift in Sources */,
 				BB90051A2DF0F25E0039BC8A /* SideDrawerView.swift in Sources */,
 				BB61EAE12DF27607005F62DF /* CreateGroupView.swift in Sources */,
 				BBC20E1C2DE0EE6400781D93 /* TaggedApp.swift in Sources */,
@@ -473,6 +484,7 @@
 				BB49E8242DE58F420015BBDA /* ReusableProfileContent.swift in Sources */,
 				BBCD1C1C2DE29870001588EA /* User.swift in Sources */,
 				BB38D8832DFBE7DF0041822D /* SettingsView.swift in Sources */,
+				BB98BEAA2E14C1B00087878E /* JoinedGroup.swift in Sources */,
 				BB38D8812DFBE3690041822D /* PrivacyView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

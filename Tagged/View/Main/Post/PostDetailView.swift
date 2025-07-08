@@ -7,6 +7,9 @@ import FirebaseFirestore
 struct PostDetailView: View {
     @State private var commentText: String = ""
     @State private var isFollowing = false
+    @State private var currentStreak: Int? = nil
+    @State private var isAdmin = false
+
     @Environment(\.dismiss) var dismiss
 
     @State var isFetching: Bool = false
@@ -44,8 +47,10 @@ struct PostDetailView: View {
                         
                         WebImage(url: post.userProfileURL)
                             .resizable()
-                            .frame(width: 30, height: 30)
+                            .scaledToFill()
                             .clipShape(Circle())
+                            .clipped()
+                            .frame(width: 30, height: 30)
                             .alignmentGuide(.firstTextBaseline) { d in d[.bottom] }
                             .padding(.trailing, 3)
                         
@@ -56,7 +61,7 @@ struct PostDetailView: View {
                         HStack(spacing: 4) {
                             Text("🔥")
                                 .font(.system(size: 15))
-                            Text("3") // Replace with dynamic value if needed
+                            Text("\(currentStreak ?? 0)") // Replace with dynamic value if needed
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .font(.system(size: 15))
@@ -67,24 +72,7 @@ struct PostDetailView: View {
                         
                         Spacer()
                         
-                        Button(action: {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
-                                isFollowing.toggle()
-                            }
-                        }) {
-                            Image(systemName: isFollowing ? "checkmark.circle.fill" : "plus.circle")
-                                .font(.system(size: 20))
-                                .foregroundColor(.accentColor)
-                        }
-                        .padding(.trailing, 4)
-                        
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 18))
-                            .foregroundColor(.accentColor)
-                            .padding(.top, -3)
-                            .padding(.trailing, 4)
-                        
-                        if post.userUID == userUID{
+                        if post.userUID == userUID || isAdmin {
                             Menu {
                                 Button("Delete Post", role: .destructive, action: deletePost)
                             } label: {
@@ -115,7 +103,7 @@ struct PostDetailView: View {
                         
                         // User + Caption
                         VStack(alignment: .leading, spacing: 6) {
-                            HStack(alignment: .center) {
+                            HStack(alignment: .top) {
                                 Text(post.title)
                                     .font(.system(size: 18, weight: .bold))
                                 
@@ -168,6 +156,7 @@ struct PostDetailView: View {
                             
                             WebImage(url: profileURL)
                                 .resizable()
+                                .scaledToFill()
                                 .frame(width: 28, height: 28)
                                 .clipShape(Circle())
                             
@@ -237,6 +226,8 @@ struct PostDetailView: View {
         
         .onAppear {
             if docListener == nil {
+                Task { await fetchStreak() }
+                Task { await fetchAdminStatus() }      // ← NEW
                 guard let postID = post.id else { return }
 
                 docListener = Firestore.firestore()
@@ -268,38 +259,107 @@ struct PostDetailView: View {
             }
         }
     }
+    
+    /// Checks if `user_UID` matches this group’s adminID.
+    func fetchAdminStatus() async {
+        guard let gid = post.groupID, !gid.isEmpty else { return }
 
+        do {
+            // 1️⃣  OPTION A — quickest (your JoinedGroups sub-doc)
+            let joinedSnap = try await Firestore.firestore()
+                .collection("Users")
+                .document(userUID)
+                .collection("JoinedGroups")
+                .document(gid)
+                .getDocument()
+
+            // If you store `adminID` in the sub-doc’s `groupMeta`:
+            let adminID = joinedSnap.get("groupMeta.adminID") as? String
+                ?? joinedSnap.get("adminID") as? String
+                ?? ""                                // fallback
+
+            await MainActor.run { isAdmin = (adminID == userUID) }
+
+        } catch {
+            print("❌ fetchAdminStatus:", error.localizedDescription)
+        }
+    }
+
+    
+    func fetchStreak() async {
+        guard
+            let groupID = post.groupID,
+            !groupID.isEmpty
+        else { return }
+
+        do {
+            let snap = try await Firestore.firestore()
+                .collection("Users")
+                .document(post.userUID) // ← fetch the *poster’s* joined group doc
+                .collection("JoinedGroups")
+                .document(groupID)
+                .getDocument()
+
+            let streak = snap["streak"] as? Int ?? 0
+            await MainActor.run {
+                currentStreak = streak
+            }
+
+        } catch {
+            print("❌ fetchStreak error:", error.localizedDescription)
+        }
+    }
+    
     func likePost() {
-        guard let postID = post.id else { return }
-        let postRef = Firestore.firestore().collection("Posts").document(postID)
-        let userRef = Firestore.firestore().collection("Users").document(post.userUID)
+        guard
+            let postID  = post.id,
+            let groupID = post.groupID         // every post stores its server
+        else { return }
 
-        Firestore.firestore().runTransaction({ transaction, errorPointer in
+        let db        = Firestore.firestore()
+        let postRef   = db.collection("Posts").document(postID)
+        let userRef   = db.collection("Users").document(post.userUID)
+        let joinedRef = userRef
+            .collection("JoinedGroups")
+            .document(groupID)
+
+        db.runTransaction({ txn, errPtr -> Any? in
             do {
-                let postSnapshot = try transaction.getDocument(postRef)
-                var likedIDs = postSnapshot.get("likedIDs") as? [String] ?? []
+                // ── 1. read current likedIDs ───────────────────────────────
+                let postSnap = try txn.getDocument(postRef)
+                var likedIDs = postSnap.get("likedIDs") as? [String] ?? []
 
-                let isLiked = likedIDs.contains(userUID)
-                if isLiked {
+                let alreadyLiked = likedIDs.contains(userUID)
+                let delta: Int64 = alreadyLiked ? -1 : 1
+
+                // ── 2. mutate likedIDs array ──────────────────────────────
+                if alreadyLiked {
                     likedIDs.removeAll { $0 == userUID }
-                    transaction.updateData(["userPoints": FieldValue.increment(Int64(-1))], forDocument: userRef)
                 } else {
                     likedIDs.append(userUID)
-                    transaction.updateData(["userPoints": FieldValue.increment(Int64(1))], forDocument: userRef)
                 }
+                txn.updateData(["likedIDs": likedIDs], forDocument: postRef)
 
-                transaction.updateData(["likedIDs": likedIDs], forDocument: postRef)
+                // ── 3. global like counter on poster’s user doc ───────────
+                txn.updateData([
+                    "userLikeCount": FieldValue.increment(delta)
+                ], forDocument: userRef)
+
+                // ── 4. per-server points on JoinedGroups ─────────────────
+                txn.updateData([
+                    "points": FieldValue.increment(delta)
+                ], forDocument: joinedRef)
 
             } catch {
-                errorPointer?.pointee = error as NSError
+                errPtr?.pointee = error as NSError
             }
             return nil
         }) { _, error in
-            if let error = error {
-                print("Transaction failed: \(error.localizedDescription)")
-            }
+            if let error { print("🔥 likePost txn failed:", error.localizedDescription) }
         }
     }
+
+
 
     func deletePost() {
         Task {
@@ -365,6 +425,7 @@ struct PostDetailView: View {
         HStack(alignment: .top, spacing: 10) {
             WebImage(url: comment.userProfileURL)
                 .resizable()
+                .scaledToFill()
                 .frame(width: 28, height: 28)
                 .clipShape(Circle())
             
@@ -372,6 +433,7 @@ struct PostDetailView: View {
                 Text(comment.username)
                     .font(.system(size: 14))
                     .foregroundColor(.accentColor)
+                    .fontWeight(.semibold)
 
                 Text(comment.text)
                     .font(.system(size: 14))

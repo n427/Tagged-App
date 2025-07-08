@@ -1,8 +1,8 @@
-import SwiftUI
-import FirebaseFirestoreSwift
+import Foundation
 import FirebaseFirestore
+import FirebaseFirestoreSwift
 
-struct Group: Identifiable, Codable {
+struct Group: Identifiable, Codable, Equatable {
     @DocumentID var id: String?
     var title: String
     var description: String
@@ -10,8 +10,13 @@ struct Group: Identifiable, Codable {
     var roomCode: String
     var isPlayMode: Bool
     var hasPunishment: Bool
-    var captions: [String]
     var imageURL: URL?
     var createdBy: String
     var createdAt: Timestamp?
+    var members: [String]? = []
+    var adminID: String
+
+    var asDictionary: [String: Any] {
+        (try? Firestore.Encoder().encode(self)) ?? [:]
+    }
 }
