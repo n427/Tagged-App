@@ -10,7 +10,6 @@ struct SplashView: View {
                 .scaledToFit()
                 .frame(width: 180, height: 180)
                 .opacity(1)
-                .padding(.top, -40)
         }
     }
 }
