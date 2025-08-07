@@ -2,6 +2,7 @@ import SwiftUI
 import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
+import FirebaseMessaging
 
 struct LoginView: View {
     @State private var email = ""
@@ -95,29 +96,35 @@ struct LoginView: View {
         .alert(errorMessage, isPresented: $showError, actions: {})
     }
 
+    func resetPassword() {
+        Task {
+            do {
+                try await Auth.auth().sendPasswordReset(withEmail: email)
+            } catch {
+                await setError(error)
+            }
+        }
+    }
+
     func loginUser() {
         isLoading = true
         closeKeyboard()
-        
         Task {
-            defer {
-                Task { @MainActor in
-                    isLoading = false
-                }
-            }
-
+            defer { Task { @MainActor in isLoading = false } }
             do {
                 try await Auth.auth().signIn(withEmail: email, password: password)
                 try await fetchUser()
             } catch {
                 await setError(error)
             }
-
         }
     }
 
     func fetchUser() async throws {
-        guard let userID = Auth.auth().currentUser?.uid else { return }
+        guard let userID = Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "Auth", code: 0,
+                          userInfo: [NSLocalizedDescriptionKey: "User not signed in"])
+        }
 
         let user = try await Firestore.firestore()
             .collection("Users")
@@ -130,16 +137,8 @@ struct LoginView: View {
             profileURL = user.userProfileURL
             logStatus = true
         }
-    }
 
-    func resetPassword() {
-        Task {
-            do {
-                try await Auth.auth().sendPasswordReset(withEmail: email)
-            } catch {
-                await setError(error)
-            }
-        }
+        try await FCMService.saveFCMToken(forUID: userID)
     }
 
     func setError(_ error: Error) async {
@@ -149,5 +148,6 @@ struct LoginView: View {
             isLoading = false
         }
     }
+
 
 }

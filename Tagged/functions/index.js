@@ -1,166 +1,165 @@
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
-const { onSchedule }                  = require("firebase-functions/v2/scheduler");
-const { DateTime }                    = require("luxon");
-const admin                           = require("firebase-admin");
-const { Timestamp }                   = require("firebase-admin/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { DateTime }   = require("luxon");
+const admin          = require("firebase-admin");
 
 admin.initializeApp();
 const db        = admin.firestore();
 const messaging = admin.messaging();
 
-/**
- * 1️⃣ Notify on new comment
- */
 exports.notifyOnNewComment = onDocumentCreated(
-  "Posts/{postID}/Comments/{commentID}",
+  "Posts/{postID}/comments/{commentID}",
   async (event) => {
-    const comment    = event.data.data();           // { authorID, authorName, content, ... }
-    const { postID } = event.params;
+    try {
+      const comment = event.data?.data();
+      if (!comment) return;
 
-    // 1. Lookup post to find its owner
-    const postSnap = await db.doc(`Posts/${postID}`).get();
-    if (!postSnap.exists) return;
-    const post = postSnap.data();
-    const ownerID = post.authorID;
+      const { postID, commentID } = event.params;
+      const postSnap = await db.doc(`Posts/${postID}`).get();
+      if (!postSnap.exists) return;
 
-    // 2. Gather owner’s device tokens
-    const tokensSnap = await db.collection(`Users/${ownerID}/tokens`).get();
-    const tokens = tokensSnap.docs.map(d => d.id);
-    if (tokens.length === 0) return;
+      const post = postSnap.data();
 
-    // 3. Send notification
-    await messaging.sendMulticast({
-      tokens,
-      notification: {
-        title: `${comment.authorName} commented`,
-        body: comment.content.slice(0, 100),    // snippet
-      },
-      data: {
-        type: "new_comment",
-        postID,
-        commentID: event.params.commentID,
-      },
-    });
+      const ownerID = post.authorID || post.ownerID || post.userUID || post.userId || post.creatorID;
+      if (!ownerID) {
+        console.error('❌ [notifyOnNewComment] No ownerID found');
+        return;
+      }
+
+      const userSnap = await db.doc(`Users/${ownerID}`).get();
+      if (!userSnap.exists) return;
+
+      const token = userSnap.data()?.fcmToken;
+      if (!token) {
+        console.error("❌ [notifyOnNewComment] No token for", ownerID);
+        return;
+      }
+
+      const msg = {
+        token,
+          notification: {
+            title: `💬 ${comment.username}`,
+            body: `Commented: “${comment.text || ''}”`
+          },
+        data: { type: 'new_comment', postID, commentID }
+      };
+
+      const response = await messaging.send(msg);
+    } catch (err) {
+      console.error("❌ [notifyOnNewComment] Error:", err);
+    }
   }
 );
 
-/**
- * 2️⃣ Notify on new like
- */
 exports.notifyOnNewLike = onDocumentCreated(
-  "Posts/{postID}/Likes/{userID}",
+  "Posts/{postID}/likes/{likerID}",
   async (event) => {
-    const likerID    = event.params.userID;
-    const { postID } = event.params;
+    try {
+      const { postID, likerID } = event.params;
+      const likeData = event.data?.data();
+      if (!likeData) return;
 
-    // 1. Lookup post owner
-    const postSnap = await db.doc(`Posts/${postID}`).get();
-    if (!postSnap.exists) return;
-    const post = postSnap.data();
-    const ownerID = post.authorID;
+      const postSnap = await db.doc(`Posts/${postID}`).get();
+      if (!postSnap.exists) return;
 
-    // 2. Skip if liker is the owner
-    if (ownerID === likerID) return;
+      const post = postSnap.data();
 
-    // 3. Fetch liker’s display name
-    const userSnap = await db.doc(`Users/${likerID}`).get();
-    const liker    = userSnap.exists ? userSnap.data().displayName || "Someone" : "Someone";
+      const ownerID = post.authorID || post.ownerID || post.userUID || post.userId || post.creatorID;
+      if (!ownerID || likerID === ownerID) {
+        console.error('❌ [notifyOnNewLike] Invalid ownerID');
+        return;
+      }
 
-    // 4. Gather owner’s tokens
-    const tokensSnap = await db.collection(`Users/${ownerID}/tokens`).get();
-    const tokens = tokensSnap.docs.map(d => d.id);
-    if (tokens.length === 0) return;
+      const userSnap = await db.doc(`Users/${ownerID}`).get();
+      if (!userSnap.exists) return;
 
-    // 5. Send notification
-    await messaging.sendMulticast({
-      tokens,
-      notification: {
-        title: `${liker} liked your post`,
-        body: post.title?.slice(0, 50) || "Tap to view",
-      },
-      data: {
-        type: "new_like",
-        postID,
-      },
-    });
+      const token = userSnap.data()?.fcmToken;
+      if (!token) {
+        console.error("❌ [notifyOnNewLike] No token for", ownerID);
+        return;
+      }
+
+      const msg = {
+        token,
+          notification: {
+            title: `❤️ “${post.title || 'Your post'}”`,
+            body: `Just got a like!`
+          },
+        data: { type: 'new_like', postID }
+      };
+
+      const response = await messaging.send(msg);
+    } catch (err) {
+      console.error("❌ [notifyOnNewLike] Error:", err);
+    }
   }
 );
 
-/**
- * 3️⃣ Notify on tag rotation
- */
 exports.notifyOnTagRotation = onDocumentUpdated(
   "Groups/{groupID}",
   async (event) => {
-    const before = event.data.before.data();
-    const after  = event.data.after.data();
+    try {
+        const groupID = event.params.groupID;
+          const before = event.data?.before.data();
+          const after = event.data?.after.data();
 
-    // Only proceed if currentTag actually changed
-    if (before.currentTag === after.currentTag) return;
+          if (!before || !after || before.currentTag === after.currentTag) return;
 
-    const groupID = event.params.groupID;
+          const groupSnap = await db.doc(`Groups/${groupID}`).get();
+          const memberIDs = groupSnap.data()?.members || [];
 
-    // 1. Fetch all group members
-    const membersSnap = await db.collection(`Groups/${groupID}/members`).get();
-    const memberIDs = membersSnap.docs.map(d => d.id);
+      for (const uid of memberIDs) {
+        const snap = await db.doc(`Users/${uid}`).get();
+        const token = snap.data()?.fcmToken;
+        if (!token) continue;
 
-    // 2. Gather all member tokens
-    const tokens = [];
-    for (const uid of memberIDs) {
-      const tokenSnap = await db.collection(`Users/${uid}/tokens`).get();
-      tokenSnap.docs.forEach(d => tokens.push(d.id));
+        const msg = {
+          token,
+          notification: {
+            title: `🔁 ${after.title || 'Your group'}`,
+            body: `This week's Tag: ${after.currentTag || ''}`
+          },
+          data: { type: 'tag_rotated', groupID }
+        };
+
+        try {
+          await messaging.send(msg);
+        } catch (err) {
+          console.error(`❌ [notifyOnTagRotation] Error sending to ${uid}:`, err);
+        }
+      }
+    } catch (err) {
+      console.error("❌ [notifyOnTagRotation] Error:", err);
     }
-    if (tokens.length === 0) return;
-
-    // 3. Send notification
-    await messaging.sendMulticast({
-      tokens,
-      notification: {
-        title: "New Weekly Tag!",
-        body: `This week’s prompt: "${after.currentTag}"`,
-      },
-      data: {
-        type: "tag_rotated",
-        groupID,
-      },
-    });
   }
 );
 
-/**
- * Your existing rotateTags scheduler stays below unchanged…
- * rotateTags – sets nextTagSwitchDate to the coming Sunday 23:59 PT
- * and rotates current / queued / past tags for every group.
- */
 exports.rotateTags = onSchedule(
   { schedule: "every sunday 23:59", timeZone: "America/Los_Angeles" },
   async () => {
     const nowLA = DateTime.now().setZone("America/Los_Angeles");
-    let upcomingSunday = nowLA
-      .plus({ days: (7 - nowLA.weekday) % 7 })
+    let nextSwitch = nowLA.plus({ days: (7 - nowLA.weekday) % 7 })
       .set({ hour: 23, minute: 59, second: 0, millisecond: 0 });
-    if (upcomingSunday <= nowLA) {
-      upcomingSunday = upcomingSunday.plus({ weeks: 1 });
-    }
-    const ts = Timestamp.fromDate(upcomingSunday.toJSDate());
+    if (nextSwitch <= nowLA) nextSwitch = nextSwitch.plus({ weeks: 1 });
+    const ts = admin.firestore.Timestamp.fromDate(nextSwitch.toJSDate());
 
-    const snap  = await db.collection("Groups").get();
+    const snap = await db.collection("Groups").get();
     const batch = db.batch();
     snap.forEach(doc => {
       const d = doc.data();
-      const nextSwitch = d.nextTagSwitchDate?.toDate?.() || new Date(0);
-      if (nextSwitch > new Date()) return;
-
-      const queue  = Array.isArray(d.queuedTags) ? d.queuedTags : [];
+      const switchDate = d.nextTagSwitchDate?.toDate?.() || new Date(0);
+      if (switchDate > new Date()) return;
+      const queue = Array.isArray(d.queuedTags) ? d.queuedTags : [];
       const newTag = queue.length ? queue[0] : d.currentTag;
-      const newQ   = queue.length ? queue.slice(1) : [];
+      const newQ   = queue.slice(1);
+        batch.update(doc.ref, {
+          currentTag: newTag,
+          queuedTags: newQ,
+          pastTags: admin.firestore.FieldValue.arrayUnion(d.currentTag || ""),
+          nextTagSwitchDate: ts,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
 
-      batch.update(doc.ref, {
-        currentTag:        newTag,
-        queuedTags:        newQ,
-        pastTags:          admin.firestore.FieldValue.arrayUnion(d.currentTag ?? ""),
-        nextTagSwitchDate: ts
-      });
     });
     await batch.commit();
   }

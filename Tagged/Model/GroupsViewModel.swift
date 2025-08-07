@@ -149,8 +149,10 @@ final class GroupsViewModel: ObservableObject {
                     self.activeGroupID = storedID
                 } else if let taggedGlobal = fetched.first(where: { $0.groupMeta.title == "Tagged Global" }) {
                     self.activeGroupID = taggedGlobal.groupID
+                } else if let fallback = fetched.first?.groupID {
+                    self.activeGroupID = fallback
                 } else {
-                    self.activeGroupID = fetched.first?.groupID
+                    self.activeGroupID = nil
                 }
             }
     }

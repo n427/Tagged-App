@@ -155,12 +155,24 @@ struct YearbookView: View {
                 .order(by: "publishedDate", descending: true)
                 .getDocuments()
 
+            let pst = TimeZone(identifier: "America/Los_Angeles")!
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = pst
+
             var grouped: [Date: [Post]] = [:]
 
             for doc in snapshot.documents {
                 if let post = try? doc.data(as: Post.self) {
-                    let weekStart = startOfTaggedWeek(for: post.publishedDate)
-                    grouped[weekStart, default: []].append(post)
+                    let date = post.publishedDate
+
+                    let weekday = calendar.component(.weekday, from: date)
+                    let daysSinceMonday = (weekday + 5) % 7
+                    let weekStart = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -daysSinceMonday, to: date)!)
+                    let weekEnd = calendar.date(byAdding: .second, value: 7 * 24 * 60 * 60 - 1, to: weekStart)!
+
+                    if date >= weekStart && date <= weekEnd {
+                        grouped[weekStart, default: []].append(post)
+                    }
                 }
             }
 
@@ -169,6 +181,7 @@ struct YearbookView: View {
                 isLoading = false
                 isInitialLoad = false
             }
+
         } catch {
             await MainActor.run {
                 isLoading = false
@@ -176,5 +189,4 @@ struct YearbookView: View {
             }
         }
     }
-
 }

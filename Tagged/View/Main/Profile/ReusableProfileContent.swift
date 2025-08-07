@@ -23,7 +23,7 @@ struct ReusableProfileContent: View {
     @State private var showSettings   = false
     @State private var hasLoaded = false
     @State private var lastGroupID: String?
-
+    var isParentLoading: Bool = false
 
     var userUIDForRefresh: String {
         user.userUID
@@ -34,7 +34,7 @@ struct ReusableProfileContent: View {
 
     var body: some View {
         ZStack {
-            if !isContentReady {
+            if !isContentReady && !isParentLoading {
                 VStack {
                     Spacer()
                     ZStack {
@@ -135,7 +135,11 @@ struct ReusableProfileContent: View {
                                 profileButton("Settings") { showSettings.toggle() }
                                     .confirmationDialog("Settings", isPresented: $showSettings) {
                                         Button { logOutAction?() }  label: { Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right") }
-                                        Button(role: .destructive) { deleteAccountAction?() } label: { Label("Delete Account", systemImage: "trash") }
+                                        Button(role: .destructive) {
+                                            deleteAccountAction?()
+                                        } label: {
+                                            Label("Delete Account", systemImage: "trash")
+                                        }
                                     }
                             }
                             .padding(.horizontal)

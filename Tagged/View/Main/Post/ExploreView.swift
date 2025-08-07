@@ -156,13 +156,25 @@ struct ExploreView: View {
         }
 
         do {
+            let pst = TimeZone(identifier: "America/Los_Angeles")!
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = pst
+
+            let now = Date()
+            let weekday = calendar.component(.weekday, from: now)
+            let daysSinceMonday = (weekday + 5) % 7
+
+            let mondayStartPST = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -daysSinceMonday, to: now)!)
+
             let snapshot = try await Firestore.firestore()
                 .collection("Posts")
                 .whereField("groupID", isEqualTo: groupID)
+                .whereField("publishedDate", isGreaterThanOrEqualTo: Timestamp(date: mondayStartPST))
+
                 .order(by: "publishedDate", descending: true)
                 .limit(to: 50)
                 .getDocuments()
-
+            
             let posts = snapshot.documents.compactMap { try? $0.data(as: Post.self) }
 
             await MainActor.run {

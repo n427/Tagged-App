@@ -223,128 +223,105 @@ struct RegisterView: View {
     }
 
     func createAccountAndSendEmail() {
-        isLoading = true
-        closeKeyboard()
-
-        Task {
-            do {
-                let result = try await Auth.auth()
-                    .createUser(withEmail: email, password: password)
-                let authUser = result.user
-                registrationUID = authUser.uid
-
-                try await authUser.sendEmailVerification()
-
-                await MainActor.run { emailSent = true }
-
-            } catch {
-                await setError(error)
+            isLoading = true
+            closeKeyboard()
+            Task {
+                do {
+                    let result = try await Auth.auth().createUser(withEmail: email, password: password)
+                    try await result.user.sendEmailVerification()
+                    await MainActor.run { emailSent = true }
+                } catch {
+                    await setError(error)
+                }
+                isLoading = false
             }
-            isLoading = false
         }
-    }
 
     func verifyAndFinishRegistration() {
         isLoading = true
-
         Task {
             do {
                 guard let user = Auth.auth().currentUser else {
                     throw NSError(domain: "Auth", code: 0,
                                   userInfo: [NSLocalizedDescriptionKey: "User signed out"])
                 }
-
                 try await user.reload()
-
                 guard user.isEmailVerified else {
                     throw NSError(domain: "Auth", code: 0,
                                   userInfo: [NSLocalizedDescriptionKey: "Email not verified yet."])
                 }
-
                 try await finishProfileSetup(for: user.uid)
-
-                logStatus = true
-
+                await MainActor.run {
+                    UserDefaults.standard.set(false, forKey: "has_seen_walkthrough")
+                    logStatus = true
+                }
             } catch {
                 await setError(error)
             }
-
             isLoading = false
         }
     }
 
     func finishProfileSetup(for userUID: String) async throws {
-
+        self.userUID = userUID
         guard let imageData = userProfilePicData else {
             throw NSError(domain: "Signup", code: 0,
                           userInfo: [NSLocalizedDescriptionKey: "Missing profile pic"])
         }
-        let _ = try await Auth.auth().currentUser?.getIDTokenResult(forcingRefresh: true)
-
-        let storageRef = Storage.storage()
-            .reference().child("Profile_Images").child(userUID)
-        
-        let _ = try await storageRef.putDataAsync(imageData)
+        _ = try await Auth.auth().currentUser?.getIDTokenResult(forcingRefresh: true)
+        let storageRef = Storage.storage().reference().child("Profile_Images").child(userUID)
+        _ = try await storageRef.putDataAsync(imageData)
         let downloadURL = try await storageRef.downloadURL()
 
         let userDoc = User(
-            username:       username,
-            name:           name,
-            userBio:        bio,
-            userUID:        userUID,
-            userEmail:      email,
+            username: username,
+            name: name,
+            userBio: bio,
+            userUID: userUID,
+            userEmail: email,
             userProfileURL: downloadURL,
-            userLikeCount:  0
+            userLikeCount: 0
         )
         let encodedUser = try Firestore.Encoder().encode(userDoc)
-        try await claimUsername(username.lowercased(),
-                                uid: userUID,
-                                userData: encodedUser)
+        try await claimUsername(username.lowercased(), uid: userUID, userData: encodedUser)
 
-        let globalGroupID  = "taggedgroup"
-        let globalGroupRef = Firestore.firestore().collection("Groups")
-                              .document(globalGroupID)
-        let joinedGroups   = Firestore.firestore().collection("Users")
-                              .document(userUID).collection("JoinedGroups")
+        let globalGroupID = "taggedgroup"
+        let globalGroupRef = Firestore.firestore().collection("Groups").document(globalGroupID)
+        let joinedGroups = Firestore.firestore().collection("Users").document(userUID).collection("JoinedGroups")
 
-        try await globalGroupRef
-            .updateData(["members": FieldValue.arrayUnion([userUID])])
-
+        try await globalGroupRef.updateData(["members": FieldValue.arrayUnion([userUID])])
         if let snap = try? await globalGroupRef.getDocument(),
            var meta = try? snap.data(as: Group.self) {
             meta.id = nil
             let joinedData: [String: Any] = [
-                "groupMeta":   try Firestore.Encoder().encode(meta),
+                "groupMeta":    try Firestore.Encoder().encode(meta),
                 "streak":       0,
-                "lastPostDate": FieldValue.serverTimestamp(),
+                "lastPostDate": NSNull(),
                 "lastTagWeek":  NSNull(),
                 "points":       0
             ]
             try await joinedGroups.document(globalGroupID).setData(joinedData)
         }
 
-        do {
-            let token = try await Messaging.messaging().token()
-            try await Firestore.firestore().collection("Users")
-                .document(userUID)
-                .updateData(["fcmToken": token])
-        } catch {
-        }
+        try await FCMService.saveFCMToken(forUID: userUID)
 
-        UserDefaults.standard.set(globalGroupID, forKey: "active_group_id")
-        userNameStored = username
-        self.userUID   = userUID
-        profileURL     = downloadURL
+        await MainActor.run {
+            UserDefaults.standard.set(globalGroupID, forKey: "active_group_id")
+            userNameStored = username
+            self.userUID   = userUID
+            profileURL     = downloadURL
+            logStatus      = true
+        }
     }
-    
+
     func setError(_ error: Error) async {
         await MainActor.run {
             errorMessage = error.readableAuthMessage
-            showError.toggle()
+            showError = true
             isLoading = false
         }
     }
-    
+
     func usernameExists(_ name: String) async -> Bool {
         let doc = try? await Firestore.firestore()
             .collection("Usernames")
@@ -352,14 +329,11 @@ struct RegisterView: View {
             .getDocument()
         return doc?.exists == true
     }
-    
-    
+
     func localValidation() async -> [String] {
         var issues = [String]()
-
         if username.isEmpty { issues.append("Username can’t be empty.") }
         if await usernameExists(username) { issues.append("Username already taken.") }
-
         let pwdRegex = #"^(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{6,}$"#
         if password.range(of: pwdRegex, options: .regularExpression) == nil {
             issues.append("Password needs 6+ characters, 1 uppercase and 1 symbol.")
@@ -367,14 +341,11 @@ struct RegisterView: View {
         if password != confirmPassword {
             issues.append("Passwords don’t match.")
         }
-
         return issues
     }
-
 }
 
 extension Error {
-
     var readableAuthMessage: String {
         func deepest(_ err: NSError) -> NSError {
             if let inner = err.userInfo[NSUnderlyingErrorKey] as? NSError {
@@ -405,7 +376,6 @@ extension Error {
         if let data = nserr.userInfo["data"] as? Data,
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let msg  = (json["error"] as? [String: Any])?["message"] as? String {
-
             return msg
                 .split(separator: ":")
                 .dropFirst()

@@ -13,6 +13,7 @@ struct ReusablePostContent: View {
     @State private var paginationDoc: QueryDocumentSnapshot?
     @State private var streakCache: [String: Int] = [:]
     @State private var isStreaksLoaded: Bool = false
+    @State private var userCache: [String: User] = [:]
 
     
     let columns = [
@@ -62,10 +63,7 @@ struct ReusablePostContent: View {
                 await fetchPosts()
             }
         }
-
-
-
-
+        
         .refreshable {
             guard basedOnUID else { return }
             posts = []
@@ -79,6 +77,7 @@ struct ReusablePostContent: View {
                 streakCache = [:]
                 isStreaksLoaded = false
                 await preloadStreaks(for: newPosts)
+                await preloadUserInfo(for: newPosts)
                 await MainActor.run {
                     isStreaksLoaded = true
                 }
@@ -107,13 +106,24 @@ struct ReusablePostContent: View {
                 .toolbar(.hidden, for: .tabBar)
             } label: {
                 let streak = streakCache[post.userUID]
-                ExploreCard(post: post, userStreak: streak)
+                ExploreCard(post: post, userStreak: streak, userInfo: userCache[post.userUID])
                     .contentShape(Rectangle())
             }
             .buttonStyle(PlainButtonStyle())
             .onAppear {
                 if streakCache[post.userUID] == nil {
                     Task { await fetchStreak(for: post.userUID, in: post.groupID) }
+                }
+                if userCache[post.userUID] == nil {
+                    Task {
+                        let db = Firestore.firestore()
+                        let doc = try? await db.collection("Users").document(post.userUID).getDocument()
+                        if let data = try? doc?.data(as: User.self) {
+                            await MainActor.run {
+                                userCache[post.userUID] = data
+                            }
+                        }
+                    }
                 }
                 if post.id == posts.last?.id && paginationDoc != nil {
                     Task { await fetchPosts() }
@@ -124,6 +134,25 @@ struct ReusablePostContent: View {
     }
 
 
+    func preloadUserInfo(for posts: [Post]) async {
+        let uniqueUserIDs = Set(posts.map { $0.userUID })
+
+        await withTaskGroup(of: Void.self) { group in
+            for uid in uniqueUserIDs {
+                group.addTask {
+                    let db = Firestore.firestore()
+                    let doc = try? await db.collection("Users").document(uid).getDocument()
+                    if let data = try? doc?.data(as: User.self) {
+                        await MainActor.run {
+                            userCache[uid] = data
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    
     func fetchStreak(for posterUID: String, in groupID: String?) async {
         guard
             !posterUID.isEmpty,
@@ -185,9 +214,9 @@ struct ReusablePostContent: View {
                 isFetching = false
                 isStreaksLoaded = true
             }
+            await preloadUserInfo(for: fetchedPosts)
 
         } catch {
-            print(error.localizedDescription)
             await MainActor.run { isFetching = false }
         }
     }
@@ -224,6 +253,7 @@ struct RoundedCorner: Shape {
 struct ExploreCard: View {
     let post: Post
     let userStreak: Int?
+    let userInfo: User?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -245,14 +275,14 @@ struct ExploreCard: View {
                 .font(.system(size: 14, weight: .bold))
 
             HStack {
-                WebImage(url: post.userProfileURL)
+                WebImage(url: userInfo?.userProfileURL ?? post.userProfileURL)
                     .resizable()
                     .scaledToFill()
                     .clipShape(Circle())
                     .clipped()
                     .frame(width: 18, height: 18)
 
-                Text(post.userName)
+                Text(userInfo?.name ?? post.userName)
                     .font(.caption)
                     .fontWeight(.medium)
                     .lineLimit(1)

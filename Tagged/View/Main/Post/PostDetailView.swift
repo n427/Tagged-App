@@ -23,7 +23,10 @@ struct PostDetailView: View {
     var onDelete: () -> ()
     @State private var comments: [Comment] = []
     @State private var showDoubleTapHeart = false
+    @State private var newCommentID: String? = nil
 
+    @State private var headerProfileURL: URL?
+    @State private var headerName: String = ""
     
     var body: some View {
         ZStack {
@@ -52,7 +55,7 @@ struct PostDetailView: View {
                                 currentUserUID: userUID
                             )
                         } label: {
-                            WebImage(url: post.userProfileURL)
+                            WebImage(url: headerProfileURL)
                                 .resizable()
                                 .scaledToFill()
                                 .clipShape(Circle())
@@ -60,7 +63,7 @@ struct PostDetailView: View {
                         }
                         .buttonStyle(.plain)
                         
-                        Text(post.userName)
+                        Text(headerName)
                             .font(.system(size: 16, weight: .semibold))
                             .alignmentGuide(.firstTextBaseline) { d in d[.firstTextBaseline] }
                         
@@ -92,7 +95,18 @@ struct PostDetailView: View {
                     .padding(.top, 10)
                     .padding(.bottom, 15)
                     .background(Color.white)
-                    
+                    .onAppear {
+                        Firestore.firestore()
+                          .collection("Users")
+                          .document(post.userUID)
+                          .addSnapshotListener { snap, _ in
+                            guard let data = snap?.data() else { return }
+                            if let urlString = data["userProfileURL"] as? String {
+                              headerProfileURL = URL(string: urlString)
+                            }
+                            headerName = data["name"] as? String ?? ""
+                          }
+                      }
                     ScrollView {
                         ZStack {
                             Color.gray.opacity(0.1)
@@ -105,7 +119,9 @@ struct PostDetailView: View {
                                 .onTapGesture(count: 2) {
                                     if !post.likedIDs.contains(userUID) {
                                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                        likePost()
+                                        Task {
+                                            await likePost()
+                                        }
 
                                         withAnimation(.easeInOut(duration: 0.4)) {
                                             showDoubleTapHeart = true
@@ -140,7 +156,11 @@ struct PostDetailView: View {
                                 Spacer()
 
                                 HStack(spacing: 4) {
-                                    Button(action: likePost) {
+                                    Button(action: {
+                                        Task {
+                                            await likePost()
+                                        }
+                                    }) {
                                         ZStack {
                                             if post.likedIDs.contains(userUID) {
                                                 Image(systemName: "heart.fill")
@@ -350,7 +370,7 @@ struct PostDetailView: View {
         }
     }
     
-    func likePost() {
+    func likePost() async {
         guard
             let postID  = post.id,
             let groupID = post.groupID
@@ -394,6 +414,28 @@ struct PostDetailView: View {
             }) { _, error in
             
         }
+        
+        if !post.likedIDs.contains(userUID) {
+            do {
+                let userSnap = try await Firestore.firestore()
+                    .collection("Users")
+                    .document(userUID)
+                    .getDocument()
+
+                let username = userSnap["username"] as? String ?? "Someone"
+
+                try await Firestore.firestore()
+                    .collection("Posts")
+                    .document(postID)
+                    .collection("likes")
+                    .document(userUID)
+                    .setData([
+                        "username": username
+                    ])
+            } catch {
+            }
+        }
+
     }
 
 
@@ -433,6 +475,10 @@ struct PostDetailView: View {
         )
 
         try commentRef.setData(from: newComment)
+        await MainActor.run {
+            newCommentID = newComment.id
+            commentText = ""
+        }
     }
 
     func listenToComments(for postID: String) {
@@ -440,7 +486,7 @@ struct PostDetailView: View {
             .collection("Posts")
             .document(postID)
             .collection("comments")
-            .order(by: "timestamp", descending: false)
+            .order(by: "timestamp", descending: true)
             .addSnapshotListener { snapshot, error in
                 guard let documents = snapshot?.documents else { return }
 
@@ -503,6 +549,18 @@ struct PostDetailView: View {
                 Text("\((comment.likedBy ?? []).count)")
                     .font(.caption)
                     .foregroundColor(.gray)
+            }
+        }
+        .id(comment.id ?? UUID().uuidString)
+        .opacity(comment.id == newCommentID ? 0 : 1)
+        .animation(.easeOut(duration: 0.3), value: newCommentID)
+        .onAppear {
+            if comment.id == newCommentID {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    withAnimation {
+                        newCommentID = nil
+                    }
+                }
             }
         }
     }

@@ -10,6 +10,7 @@ struct ViewPublicGroupsView: View {
     @State private var groups: [Group] = []
     @State private var isLoading = false
     @State private var showContent = false
+    @State private var didFirstLoad = false
 
     var filteredGroups: [Group] {
         if searchText.isEmpty {
@@ -53,12 +54,12 @@ struct ViewPublicGroupsView: View {
         ZStack {
             NavigationView {
                 VStack(spacing: 0) {
-
+                    
                     searchBar
-
+                    
                     ScrollView {
                         VStack(spacing: 12) {
-                            if isLoading {
+                            if isLoading && didFirstLoad {
                                 EmptyView()
                             } else if filteredGroups.isEmpty {
                                 Text("No Groups Found")
@@ -74,8 +75,6 @@ struct ViewPublicGroupsView: View {
                     .padding(.top, 3)
                     .refreshable { await fetchExploreGroups() }
                 }
-                .opacity(showContent ? 1 : 0)
-                .animation(.easeIn(duration: 0.4), value: showContent)
                 .navigationTitle("Public Groups")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -84,7 +83,17 @@ struct ViewPublicGroupsView: View {
                     }
                 }
             }
-            .task { await fetchExploreGroups() }
+            .task {
+                if !didFirstLoad {
+                    await MainActor.run {
+                        didFirstLoad = true
+                    }
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                    await fetchExploreGroups()
+                }
+            }
+            .opacity(didFirstLoad ? 1 : 0)
+            .animation(.easeIn(duration: 0.4), value: didFirstLoad)
         }
         if isLoading {
             ZStack {
@@ -99,11 +108,13 @@ struct ViewPublicGroupsView: View {
             .animation(.easeOut(duration: 0.2), value: isLoading)
         }
     }
-
+ 
     func fetchExploreGroups() async {
-        await MainActor.run {
-            isLoading = true
-            showContent = false
+        if !didFirstLoad {
+            await MainActor.run {
+                isLoading = true
+                showContent = false
+            }
         }
 
         do {

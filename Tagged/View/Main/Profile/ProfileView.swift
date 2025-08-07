@@ -10,6 +10,9 @@ struct ProfileView: View {
     @State private var errorMessage: String = ""
     @State private var showError: Bool = false
     @State private var isLoading: Bool = false
+    @State private var showPasswordPrompt = false
+    @State private var passwordInput = ""
+
 
     @AppStorage("log_status") var logStatus: Bool = false
     @AppStorage("user_UID") var userUID: String = ""
@@ -33,8 +36,11 @@ struct ProfileView: View {
                         selectedGroupAdminID: selectedGroupAdminID,
                         activeGroupID: activeGroupID,
                         logOutAction: logOutUser,
-                        deleteAccountAction: deleteAccount,
-                        onUpdate: { Task { await fetchUserData() } }
+                        deleteAccountAction: {
+                            showPasswordPrompt = true
+                        },
+                        onUpdate: { Task { await fetchUserData() } },
+                        isParentLoading: isLoading
                     )
                     .id("\(unwrappedProfile.userUID)_\(activeGroupID ?? "")")
                     .padding(.top, 12)
@@ -62,6 +68,15 @@ struct ProfileView: View {
             LoadingView(show: $isLoading)
         }
         .alert(errorMessage, isPresented: $showError) {}
+        .alert("Confirm Deletion", isPresented: $showPasswordPrompt) {
+            SecureField("Enter password", text: $passwordInput)
+            Button("Delete", role: .destructive) {
+                deleteAccount(withPassword: passwordInput)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Re-enter your password to delete your account permanently.")
+        }
         .task {
             if myProfile == nil {
                 await fetchUserData()
@@ -107,7 +122,7 @@ struct ProfileView: View {
         }
     }
     
-    func deleteAccount() {
+    func deleteAccount(withPassword password: String) {
         isLoading = true
         Task {
             do {
@@ -117,25 +132,37 @@ struct ProfileView: View {
                 let db = Firestore.firestore()
                 let storage = Storage.storage()
 
+                let credential = EmailAuthProvider.credential(
+                    withEmail: user.email ?? "",
+                    password: password
+                )
+                try await user.reauthenticate(with: credential)
+
                 try? await storage.reference()
                     .child("Profile_Images")
                     .child(uid)
                     .delete()
-
+                
                 let joinedSnap = try await db.collection("Users")
                     .document(uid)
                     .collection("JoinedGroups")
                     .getDocuments()
-                let groupIDs = joinedSnap.documents.map { $0.documentID }
 
+                let groupIDs = joinedSnap.documents.map { $0.documentID }
                 let batch = db.batch()
+
                 for gid in groupIDs {
-                    batch.updateData(["members": FieldValue.arrayRemove([uid])], forDocument: db.collection("Groups").document(gid))
-                    batch.deleteDocument(db.collection("Users").document(uid).collection("JoinedGroups").document(gid))
+                    batch.updateData(["members": FieldValue.arrayRemove([uid])],
+                                     forDocument: db.collection("Groups").document(gid))
+                    batch.deleteDocument(db.collection("Users").document(uid)
+                        .collection("JoinedGroups").document(gid))
                 }
 
-                let username = user.displayName ?? uid
-                batch.deleteDocument(db.collection("Usernames").document(username))
+                let userDoc = try await db.collection("Users").document(uid).getDocument()
+                if let username = userDoc.get("username") as? String {
+                    batch.deleteDocument(db.collection("Usernames").document(username))
+                }
+                
                 batch.deleteDocument(db.collection("Users").document(uid))
                 try await batch.commit()
 
@@ -154,14 +181,22 @@ struct ProfileView: View {
                 }
 
                 try await user.delete()
+
                 await MainActor.run {
                     logStatus = false
+                    userUID = ""
+                    userNameStored = ""
+                    profileURL = nil
+                    myProfile = nil
+                    isProfileLoaded = false
                 }
+
             } catch {
                 await setError(error)
             }
         }
     }
+
 
     func setError(_ error: Error) async {
         await MainActor.run {

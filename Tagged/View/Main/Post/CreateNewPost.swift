@@ -58,7 +58,8 @@ struct CreateNewPost: View {
                                     .frame(width: sideLength, height: sideLength)
                                     .clipped()
                                     .cornerRadius(12)
-                            } else {
+                            }
+                            else {
                                 VStack(spacing: 8) {
                                     Image(systemName: "camera")
                                         .font(.system(size: 30))
@@ -70,8 +71,10 @@ struct CreateNewPost: View {
                                 }
                             }
                         }
-                        .frame(width: sideLength, height: sideLength)
                     }
+                    .aspectRatio(1, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Title")

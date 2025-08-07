@@ -30,6 +30,8 @@ struct EditProfileView: View {
     
     @State private var usernameTaken   = false
     @State private var checkingName    = false
+    @State private var currentPassword = ""
+    @State private var showReauthPrompt = false
 
     
     @Environment(\.dismiss) private var dismiss
@@ -106,10 +108,15 @@ struct EditProfileView: View {
                                         .collection("Usernames")
                                         .document(want.lowercased())
                                         .getDocument()
-                                    
+
                                     await MainActor.run {
-                                        usernameTaken = exists?.exists ?? false
-                                        checkingName  = false
+                                        if let existingUID = exists?.data()?["uid"] as? String,
+                                           existingUID != userUID {
+                                            usernameTaken = true
+                                        } else {
+                                            usernameTaken = false
+                                        }
+                                        checkingName = false
                                     }
                                 }
                             }
@@ -122,6 +129,7 @@ struct EditProfileView: View {
                         TextField("Email", text: $email)
                             .textInputAutocapitalization(.never)
                             .disabled(true)
+                            .foregroundColor(.gray)
 
                         SecureField("New Password", text: $password)
                             .textInputAutocapitalization(.never)
@@ -181,6 +189,16 @@ struct EditProfileView: View {
         } message: {
             Text(errorMessage)
         }
+        .alert("Confirm Identity", isPresented: $showReauthPrompt) {
+            SecureField("Enter your current password", text: $currentPassword)
+            Button("Continue") {
+                Task { await reauthenticateAndSaveChanges() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Re-enter your current password to save changes.")
+        }
+
     }
     
     func loadUserData() async {
@@ -262,6 +280,43 @@ struct EditProfileView: View {
     }
 
     func saveChanges() {
+        if !password.isEmpty {
+            showReauthPrompt = true
+        } else {
+            Task { await reauthenticateAndSaveChanges() }
+        }
+    }
+
+    func reauthenticateAndSaveChanges() async {
+        isLoading = true
+        closeKeyboard()
+
+        guard let user = Auth.auth().currentUser,
+              let email = user.email else {
+            await MainActor.run {
+                errorMessage = "Authentication failed."
+                showError = true
+                isLoading = false
+            }
+            return
+        }
+
+        do {
+            let credential = EmailAuthProvider.credential(withEmail: email, password: currentPassword)
+            try await user.reauthenticate(with: credential)
+            currentPassword = ""
+            await actuallySaveChanges()
+        } catch {
+            await MainActor.run {
+                errorMessage = "Reauthentication failed. Check your current password."
+                showError = true
+                isLoading = false
+            }
+        }
+    }
+
+    
+    func actuallySaveChanges() async {
         isLoading = true
         closeKeyboard()
 
@@ -275,7 +330,8 @@ struct EditProfileView: View {
                     .collection("Usernames")
                     .document(newUsername.lowercased())
                     .getDocument()
-                if nameDoc?.exists == true {
+                if let existingUID = nameDoc?.data()?["uid"] as? String,
+                   existingUID != userUID {
                     issues.append("Username already taken.")
                 }
             }
@@ -345,11 +401,26 @@ struct EditProfileView: View {
                 }
 
                 if let authUser = Auth.auth().currentUser {
-                    if email != authUser.email {
-                        try await authUser.sendEmailVerification(beforeUpdatingEmail: email)
-                    }
-                    if !password.isEmpty {
-                        try await authUser.updatePassword(to: password)
+                    do {
+                        if email != authUser.email {
+                            if authUser.isAnonymous {
+                                throw NSError(domain: "auth", code: 401, userInfo: [NSLocalizedDescriptionKey: "You must be logged in to change email."])
+                            } else {
+                                try await authUser.sendEmailVerification(beforeUpdatingEmail: email)
+                            }
+                        }
+
+                        if !password.isEmpty {
+                            try await authUser.updatePassword(to: password)
+                        }
+
+                    } catch {
+                        await MainActor.run {
+                            errorMessage = error.localizedDescription
+                            showError = true
+                            isLoading = false
+                        }
+                        return
                     }
                 }
 
