@@ -164,3 +164,47 @@ exports.rotateTags = onSchedule(
     await batch.commit();
   }
 );
+
+const vision = require("@google-cloud/vision");
+const client = new vision.ImageAnnotatorClient();
+
+
+exports.moderatePost = onDocumentCreated(
+  "Posts/{postId}",
+  async (event) => {
+    const post = event.data?.data() || {};
+    const { postTitle = "", postText = "", imageURL = "", imageReferenceID = "" } = post;
+
+    let unsafeImage = false;
+    try {
+      let sourceForVision = null;
+
+      if (imageReferenceID) {
+        const file = admin.storage().bucket().file(`Post_Images/${imageReferenceID}`);
+        const [meta] = await file.getMetadata();
+        sourceForVision = `gs://${meta.bucket}/${meta.name}`;
+      } else if (imageURL) {
+        sourceForVision = imageURL;
+      }
+
+      if (sourceForVision) {
+        const [result] = await client.safeSearchDetection(sourceForVision);
+        const a = result.safeSearchAnnotation || {};
+        const bad = new Set(["LIKELY", "VERY_LIKELY"]);
+        if (bad.has(a.adult) || bad.has(a.violence) || bad.has(a.racy)) {
+          unsafeImage = true;
+        }
+      }
+    } catch (err) {
+      console.error("Vision check failed:", err);
+    }
+
+    const rejected = unsafeImage;
+
+    await event.data?.ref.update({
+      moderationStatus: rejected ? "rejected" : "approved",
+      moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      moderationReason: rejected ? "Content violation" : admin.firestore.FieldValue.delete(),
+    });
+  }
+);
